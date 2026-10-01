@@ -28,7 +28,7 @@ class GnaniSTTError(Exception):
 
 
 class GnaniSTTClient:
-    """Production client for Gnani Voice AI STT APIs with Batch, REST, and Chunked fallback."""
+    """Production client for Gnani Voice AI STT APIs with REST, Chunked, and Batch fallback."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GNANI_API_KEY
@@ -58,7 +58,8 @@ class GnaniSTTClient:
         max_retries: int = 3,
     ) -> str:
         """
-        Transcribe an audio clip (<= 60s) using Gnani's synchronous REST STT endpoint.
+        Transcribe an audio clip (<= GNANI_MAX_REST_AUDIO_SECONDS, 25s by default)
+        using Gnani's synchronous REST STT endpoint.
         Includes exponential backoff retry for transient network and 429/5xx errors.
         """
         if self.is_demo_mode:
@@ -231,8 +232,8 @@ class GnaniSTTClient:
     ) -> TranscriptionResult:
         """
         Unified dispatch:
-        If duration <= 60s: Single-shot Gnani REST STT.
-        If duration > 60s: Resilient Chunked & Stitched Gnani STT.
+        If duration <= GNANI_MAX_REST_AUDIO_SECONDS (25s default): Single-shot Gnani REST STT.
+        If duration > threshold: Resilient Chunked & Stitched Gnani STT.
         """
         if duration_seconds <= settings.GNANI_MAX_REST_AUDIO_SECONDS:
             if progress_callback:

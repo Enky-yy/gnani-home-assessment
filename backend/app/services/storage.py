@@ -115,17 +115,34 @@ class LocalStorageService(StorageService):
     """Local filesystem storage service (for development and zero-cloud tests)."""
 
     def __init__(self):
-        self.base_dir = settings.LOCAL_STORAGE_DIR
+        self.base_dir = os.path.abspath(settings.LOCAL_STORAGE_DIR)
         os.makedirs(self.base_dir, exist_ok=True)
         logger.info(f"Initialized Local Storage Service at {self.base_dir}")
 
     def _get_absolute_path(self, key: str) -> str:
-        # Sanitize path to prevent directory traversal
-        sanitized_key = os.path.basename(key)
-        return os.path.join(self.base_dir, sanitized_key)
+        # Preserve partitioned hierarchy (e.g. audio/<note_id>/<file>)
+        # while preventing directory traversal.
+        raw = (key or "").replace("\\", "/")
+        if ".." in raw.split("/"):
+            raise ValueError(f"Storage key escapes base directory: {key!r}")
+        normalized = os.path.normpath(raw)
+        parts = [p for p in normalized.split("/") if p not in ("", ".", "..")]
+        if not parts:
+            raise ValueError(f"Invalid storage key: {key!r}")
+        # Limit filename length to avoid OS errors
+        parts[-1] = parts[-1][:200] or "file"
+        abs_path = os.path.abspath(os.path.join(self.base_dir, *parts))
+        if abs_path != self.base_dir and not abs_path.startswith(self.base_dir + os.sep):
+            raise ValueError(f"Storage key escapes base directory: {key!r}")
+        return abs_path
+
+    def resolve_local_path(self, key: str) -> str:
+        """Return the absolute filesystem path for a storage key."""
+        return self._get_absolute_path(key)
 
     def upload_file(self, file_obj: BinaryIO, key: str, content_type: str) -> str:
         dest_path = self._get_absolute_path(key)
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         file_obj.seek(0)
         with open(dest_path, "wb") as f:
             shutil.copyfileobj(file_obj, f)
@@ -135,24 +152,60 @@ class LocalStorageService(StorageService):
     def download_file(self, key: str, destination_path: str) -> None:
         source_path = self._get_absolute_path(key)
         if not os.path.exists(source_path):
-            raise FileNotFoundError(f"Local file {source_path} does not exist.")
-        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-        if source_path != destination_path:
+            # Backward compat: files saved by the old basename-only layout.
+            legacy = os.path.join(self.base_dir, os.path.basename(key))
+            if os.path.exists(legacy):
+                logger.warning(f"Resolving legacy flat-layout file for key {key!r}")
+                source_path = legacy
+            else:
+                raise FileNotFoundError(f"Local file {source_path} does not exist.")
+        os.makedirs(os.path.dirname(os.path.abspath(destination_path)), exist_ok=True)
+        if os.path.abspath(source_path) != os.path.abspath(destination_path):
             shutil.copyfile(source_path, destination_path)
 
     def generate_access_url(self, key: str, expires_in: int = 3600) -> str:
-        # Returns API streaming endpoint for audio
-        return f"{settings.API_V1_STR}/notes/{key}/audio"
+        # Derive note_id from partitioned key layout audio/<note_id>/<filename>
+        # so the URL matches GET /api/v1/notes/{note_id}/audio.
+        parts = [p for p in key.replace("\\", "/").split("/") if p]
+        note_id = parts[1] if len(parts) >= 3 and parts[0] == "audio" else None
+        if note_id:
+            return f"{settings.API_V1_STR}/notes/{note_id}/audio"
+        # Fallback for legacy flat keys: stream via basename lookup is no
+        # longer supported; return the generic audio route prefix.
+        return f"{settings.API_V1_STR}/notes/audio"
 
     def delete_file(self, key: str) -> bool:
         path = self._get_absolute_path(key)
-        if os.path.exists(path):
-            os.remove(path)
+        # Also purge legacy flat-layout copy if present.
+        legacy = os.path.join(self.base_dir, os.path.basename(key))
+        deleted = False
+        for candidate in {path, legacy}:
+            if os.path.exists(candidate):
+                os.remove(candidate)
+                deleted = True
+        if deleted:
+            # Clean up now-empty parent dirs up to base_dir (e.g. audio/<note_id>/)
+            try:
+                parent = os.path.dirname(path)
+                while parent.startswith(self.base_dir) and parent != self.base_dir:
+                    if os.path.isdir(parent) and not os.listdir(parent):
+                        os.rmdir(parent)
+                        parent = os.path.dirname(parent)
+                    else:
+                        break
+            except OSError:
+                pass
             return True
         return False
 
     def file_exists(self, key: str) -> bool:
-        return os.path.exists(self._get_absolute_path(key))
+        try:
+            if os.path.exists(self._get_absolute_path(key)):
+                return True
+            # Legacy flat-layout fallback
+            return os.path.exists(os.path.join(self.base_dir, os.path.basename(key)))
+        except ValueError:
+            return False
 
 
 def get_storage_service() -> StorageService:

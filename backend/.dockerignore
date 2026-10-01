@@ -17,5 +17,6 @@ htmlcov/
 *.sqlite3
 uploads/
 temp_chunks/
+.env
 .env.local
 .DS_Store

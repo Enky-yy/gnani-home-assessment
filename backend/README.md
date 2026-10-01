@@ -6,11 +6,12 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 
 ## 1. Architectural Highlights
 
-- **Decoupled Asynchronous Processing**: Uploads return `202 Accepted` immediately. Heavy audio transcoding, chunking, Gnani ASR network requests, and LLM summarization run asynchronously in the background.
-- **Handling Long Audio (≥ 2 minutes)**:
-  - Clips $\le 60\text{s}$: Dispatched to Gnani's synchronous REST STT (`/stt/v3`).
-  - Audio $> 60\text{s}$: Dynamically sliced into 45-second chunks with 1-second overlap using FFmpeg. Chunks are transcribed concurrently with bounded concurrency to respect API rate limits, then stitched with precise segment timestamps.
-- **AWS S3 Storage Integration**: Audio streams are stored directly in AWS S3 buckets using `boto3`, generating presigned URLs for client streaming. Seamless fallback to local storage for zero-cloud offline development.
+- **Decoupled Asynchronous Processing**: Uploads return `202 Accepted` immediately. Heavy audio transcoding, chunking, Gnani ASR network requests, and LLM summarization run asynchronously in the background — via a durable Redis queue + `scripts/worker.py` when `REDIS_URL` is set, with automatic fallback to in-process FastAPI `BackgroundTasks` for zero-infra local dev.
+- **Handling Long Audio (Gnani REST cap is 30s)**:
+  - Clips `<= GNANI_MAX_REST_AUDIO_SECONDS` (25s default): Dispatched to Gnani's synchronous REST STT (`/stt/v3`).
+  - Audio `> 25s`: Dynamically sliced into 24-second chunks with 1-second overlap using FFmpeg. Chunks are transcribed serially (semaphore=1 + pacing sleep) to respect API rate limits, then stitched with precise segment timestamps.
+- **AWS S3 Storage Integration**: Audio streams are stored directly in AWS S3 buckets using `boto3`, generating presigned URLs for client streaming. Seamless fallback to local storage for zero-cloud offline development. Local layout preserves partitioning (`<base>/audio/<note_id>/<filename>`) with traversal protection, legacy flat-file fallback, and empty-dir cleanup on delete. Local playback URLs are note-scoped (`/api/v1/notes/{id}/audio`).
+- **Upload Guardrails**: Extension allowlist + `MAX_UPLOAD_SIZE_MB` (default 100MB, enforced pre- and post-save with `413` + orphan cleanup) matches Nginx `client_max_body_size 100M`.
 - **Visible Failure Tolerance**: Granular exception handling for corrupt files, missing audio streams, Gnani 429 rate limits, and network timeouts with exponential backoff and retry endpoints (`POST /notes/{id}/retry`).
 - **PostgreSQL State Machine**: Tracks status through `UPLOADED` $\rightarrow$ `PREPROCESSING` $\rightarrow$ `TRANSCRIBING` $\rightarrow$ `SUMMARIZING` $\rightarrow$ `COMPLETED` / `FAILED`.
 
@@ -60,7 +61,23 @@ uvicorn app.main:app --reload --port 8000
 
 ---
 
-## 4. Running Tests
+# 4. Background worker (durable Redis queue)
+
+```bash
+# Terminal 1: API (in-process BackgroundTasks fallback when REDIS_URL is empty)
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2: durable worker (requires REDIS_URL + `redis` package)
+export REDIS_URL=redis://localhost:6379/0
+python scripts/worker.py
+```
+- With `REDIS_URL` set, `POST /notes` and `POST /notes/{id}/retry` push to Redis list `audio_notes:jobs`; `scripts/worker.py` pops and runs `process_audio_note_job`. Survives API restarts, unlike pure `BackgroundTasks`.
+- `docker compose up` runs this worker automatically as the `worker` service (shares `backend_uploads` volume + `DATABASE_URL`/`REDIS_URL`).
+- Health endpoint reports queue status: `GET /api/v1/health` -> `queue.backend: redis|background-tasks`, `pending_jobs`.
+
+---
+
+## 5. Running Tests
 
 ```bash
 # Run full pytest suite (audio inspection, chunking, API endpoints, e2e long audio)

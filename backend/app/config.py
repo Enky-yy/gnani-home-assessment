@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 100
     ALLOWED_EXTENSIONS: List[str] = ["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm"]
 
+    # Background job queue (Redis). Empty/disabled -> in-process BackgroundTasks fallback.
+    REDIS_URL: Optional[str] = None
+    JOB_QUEUE_NAME: str = "audio_notes:jobs"
+
     model_config = SettingsConfigDict(
         env_file=(
             os.path.join(os.path.dirname(__file__), "..", ".env"),

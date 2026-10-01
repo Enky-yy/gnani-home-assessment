@@ -28,9 +28,35 @@ async def health_check(
         if settings.STORAGE_BACKEND.lower() == "s3":
             storage_status = f"s3-connected ({settings.AWS_S3_BUCKET_NAME})"
         else:
-            storage_status = f"local-storage-ready ({settings.LOCAL_STORAGE_DIR})"
+            base_dir = settings.LOCAL_STORAGE_DIR
+            writable = os.access(base_dir, os.W_OK) if os.path.exists(base_dir) else False
+            # Ensure the directory exists (LocalStorageService also creates it on init)
+            if not os.path.exists(base_dir):
+                os.makedirs(base_dir, exist_ok=True)
+                writable = True
+            storage_status = (
+                f"local-storage-ready ({base_dir})" if writable else f"local-storage-not-writable ({base_dir})"
+            )
     except Exception as e:
         storage_status = f"unhealthy: {str(e)}"
+
+    # Check job queue (Redis when configured)
+    queue_info: dict = {"backend": "background-tasks"}
+    try:
+        from app.services.queue import get_queue_depth, is_redis_available
+
+        if (settings.REDIS_URL or "").strip():
+            if is_redis_available():
+                queue_info = {
+                    "backend": "redis",
+                    "queue": settings.JOB_QUEUE_NAME,
+                    "pending_jobs": get_queue_depth(),
+                    "status": "connected",
+                }
+            else:
+                queue_info = {"backend": "redis", "status": "unreachable (fallback: background-tasks)"}
+    except Exception as e:
+        queue_info = {"backend": "background-tasks", "status": f"queue check failed: {e}"}
 
     # Check Gnani configuration
     has_gnani_key = bool(settings.GNANI_API_KEY and settings.GNANI_API_KEY.strip())
@@ -50,6 +76,7 @@ async def health_check(
             "backend": settings.STORAGE_BACKEND,
             "status": storage_status,
         },
+        "queue": queue_info,
         "integrations": {
             "gnani_asr": gnani_status,
             "llm_summarizer": llm_status,

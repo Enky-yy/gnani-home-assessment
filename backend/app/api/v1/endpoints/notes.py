@@ -29,6 +29,7 @@ from app.schemas.audio_note import (
 )
 from app.services.storage import StorageService
 from app.services.job_runner import process_audio_note_job
+from app.services.queue import enqueue_audio_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,13 +55,21 @@ async def upload_audio_note(
     - Enqueues background worker to validate, transcribe with Gnani ASR, and summarize with LLM.
     - Returns 202 Accepted with immediate note metadata.
     """
-    filename = file.filename or "recording.wav"
+    filename = os.path.basename(file.filename or "recording.wav")
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
     if ext not in settings.ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported audio format '{ext}'. Allowed formats: {', '.join(settings.ALLOWED_EXTENSIONS)}",
+        )
+
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    declared_size = getattr(file, "size", 0) or 0
+    if declared_size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File too large ({declared_size / 1024 / 1024:.1f} MB). Limit is {settings.MAX_UPLOAD_SIZE_MB} MB.",
         )
 
     # Generate persistent unique ID
@@ -74,11 +83,27 @@ async def upload_audio_note(
     try:
         # Stream file to storage
         saved_key = storage.upload_file(file.file, storage_key, content_type)
-        file_size = file.size or 0
-        if file_size == 0 and hasattr(file.file, "seek") and hasattr(file.file, "tell"):
+        # Determine actual persisted size (UploadFile.size is not always populated)
+        file_size = declared_size
+        try:
             file.file.seek(0, os.SEEK_END)
             file_size = file.file.tell()
             file.file.seek(0)
+        except Exception:
+            pass
+        if file_size == 0:
+            file_size = declared_size
+        if file_size > max_bytes:
+            try:
+                storage.delete_file(saved_key)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"File too large ({file_size / 1024 / 1024:.1f} MB). Limit is {settings.MAX_UPLOAD_SIZE_MB} MB.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to upload audio to storage: {e}")
         raise HTTPException(
@@ -109,9 +134,13 @@ async def upload_audio_note(
     await db.commit()
     await db.refresh(new_note)
 
-    # Dispatch background worker
-    background_tasks.add_task(process_audio_note_job, note_id)
-    logger.info(f"Enqueued background worker job for note {note_id}")
+    # Dispatch background worker: durable Redis queue when available,
+    # otherwise in-process BackgroundTasks (zero-infra local dev).
+    if not enqueue_audio_job(note_id):
+        background_tasks.add_task(process_audio_note_job, note_id)
+        logger.info(f"Enqueued in-process background job for note {note_id}")
+    else:
+        logger.info(f"Enqueued Redis worker job for note {note_id}")
 
     return new_note
 
@@ -217,9 +246,23 @@ async def stream_audio_note(
         return RedirectResponse(url=presigned_url)
 
     # For local storage, stream local file with range header support
-    local_path = os.path.join(settings.LOCAL_STORAGE_DIR, os.path.basename(note.storage_path))
-    if not os.path.exists(local_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file missing on disk.")
+    local_path = None
+    if hasattr(storage, "resolve_local_path"):
+        try:
+            local_path = storage.resolve_local_path(note.storage_path)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    else:
+        local_path = os.path.join(settings.LOCAL_STORAGE_DIR, os.path.basename(note.storage_path))
+    if not local_path or not os.path.exists(local_path):
+        # Legacy fallback: files saved by the old basename-only layout
+        legacy = os.path.join(
+            os.path.abspath(settings.LOCAL_STORAGE_DIR), os.path.basename(note.storage_path)
+        )
+        if os.path.exists(legacy):
+            local_path = legacy
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file missing on disk.")
 
     return FileResponse(
         local_path,
@@ -255,8 +298,11 @@ async def retry_audio_note(
     await db.commit()
     await db.refresh(note)
 
-    background_tasks.add_task(process_audio_note_job, note_id)
-    logger.info(f"Re-enqueued processing for note {note_id} (retry #{note.retry_count})")
+    if not enqueue_audio_job(note_id):
+        background_tasks.add_task(process_audio_note_job, note_id)
+        logger.info(f"Re-enqueued in-process processing for note {note_id} (retry #{note.retry_count})")
+    else:
+        logger.info(f"Re-enqueued Redis processing for note {note_id} (retry #{note.retry_count})")
 
     return note
 

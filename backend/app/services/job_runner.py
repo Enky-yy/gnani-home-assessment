@@ -49,7 +49,8 @@ async def process_audio_note_job(note_id: str) -> None:
     Main asynchronous background worker pipeline for processing an uploaded audio note:
     1. Download audio file from storage (AWS S3 or Local) to local worker scratch directory.
     2. Validate and inspect audio format using FFmpeg/ffprobe.
-    3. Transcribe audio with Gnani Voice AI (Single REST if <=60s, or chunked with overlap if >60s).
+    3. Transcribe audio with Gnani Voice AI (Single REST if <= GNANI_MAX_REST_AUDIO_SECONDS,
+       or chunked with overlap if longer).
     4. Generate structured summary, TL;DR, and action items via LLM.
     5. Persist transcripts, segments, and summary to PostgreSQL.
     6. Gracefully handle and record any failures visibly.
