@@ -11,3 +11,4 @@ backend/temp_chunks
 __pycache__
 *.pyc
 .env.local
+.env
