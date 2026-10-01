@@ -1,0 +1,103 @@
+# Architecture — Audio Notes Platform
+
+Technical companion to the in-app `/architecture` page. Live at
+`https://gnani.harsh-shah.me`. Repo: `https://github.com/Enky-yy/gnani-home-assessment`.
+
+## 1. Services (`docker-compose.yml`)
+
+| Service | Image / build | Role |
+|---|---|---|
+| `frontend` | `frontend/Dockerfile` (Next.js 14 standalone) | UI on `:3000` |
+| `backend` | `backend/Dockerfile` (FastAPI/uvicorn) | API on `:8000` |
+| `worker` | same backend image, `scripts/worker.py` | drains Redis queue |
+| `db` | `postgres:16-alpine` | state + transcripts + summaries |
+| `redis` | `redis:7-alpine` | durable job queue `audio_notes:jobs` |
+| `nginx` | `nginx:alpine` + `nginx.conf` (internal only) | `/api/*` → backend, `/` → frontend, 500M bodies, 300s timeouts |
+| `tunnel` | `cloudflare/cloudflared` | `gnani.harsh-shah.me` → `http://nginx:80`, TLS at edge |
+
+Postgres and uploads persist in `postgres_data` / `backend_uploads` volumes.
+
+## 2. Upload → transcript → summary
+
+1. **Upload** — Browser posts `multipart/form-data` to `POST /api/v1/notes`
+   (`backend/app/api/v1/endpoints/notes.py`). Extension allowlist + 500MB cap
+   enforced pre-save (declared size) and post-save (actual size, orphan
+   cleanup, `413`). Stored under `audio/<note_id>/<filename>` (S3 via boto3 +
+   presigned playback URLs, or local partitioned layout with traversal
+   protection). DB row created in `UPLOADED`, API returns **202** immediately.
+2. **Enqueue** — Note id pushed to Redis (`app/services/queue.py`); without
+   `REDIS_URL` the API falls back to in-process `BackgroundTasks`.
+3. **Worker** (`app/services/job_runner.py`) — downloads to scratch dir,
+   ffprobe validation (`PREPROCESSING`), then Gnani ASR (`TRANSCRIBING`):
+   - `≤ GNANI_MAX_REST_AUDIO_SECONDS` (25s): normalize → single REST call.
+   - `> 25s`: 24s FFmpeg chunks with 1s overlap at 16kHz mono, transcribed
+     serially (rate-limit safe), stitched with word-level overlap merging.
+   - Every clip is normalized first: 16kHz mono WAV + 80Hz–7.5kHz speech band
+     + EBU R128 loudness (`AudioService.normalize_to_wav`). Each Gnani success
+     logs its `request_id`.
+4. **Summarize** (`SUMMARIZING`, `app/services/summarizer.py`) — LangChain
+   `Prompt | LLM | Parser` chain producing TL;DR, key points, action items,
+   sentiment. Provider failover: configured provider first, then every other
+   keyed provider; `.env.example` placeholders never count as keys; labeled
+   extractive fallback only as last resort. Saved transcripts can be
+   re-summarized anytime via `POST /api/v1/notes/{id}/summarize` (no ASR cost).
+5. **Persist** — transcript, segments, summary → Postgres, note → `COMPLETED`
+   (or `FAILED` with the exact error + Retry). Scratch dir cleaned up.
+6. **Read** — Frontend polls lightweight `GET /status` every 2s (percent +
+   `current_step`), then loads the full note. Audio streams from
+   `GET /{id}/audio` (S3 redirect or local file).
+
+## 3. Long audio
+
+Gnani REST caps at 30s ideal, so `> 25s` audio is sliced into 24s overlapping
+chunks, each within the ideal window. Serial execution + pacing sleeps respect
+429 limits with exponential backoff; the shared ~1s overlap is collapsed by
+suffix/prefix word merging (min 3 words, case/punctuation-insensitive) so seams
+don't duplicate phrases. Verified live: 150s narration → 7 chunks → COMPLETED
+in ~50s with a quality transcript.
+
+## 4. Sync vs background
+
+- **Synchronous:** validation, storage write, DB insert, 202 response, status
+  reads, audio streaming, rename/delete, re-summarize (single LLM call).
+- **Background:** storage download, ffprobe, normalization, chunking, Gnani
+  calls, LLM summarization, final DB write, cleanup.
+
+## 5. Failure handling (all visible, per the brief)
+
+- Corrupt/empty audio → `FAILED` with ffprobe reason + Retry.
+- Expired Gnani key (401/403): never retried; single clip fails loudly, chunked
+  audio fails only if *all* chunks error, partial results survive.
+- Dead LLM key/quota: failover to next provider → labeled extractive fallback
+  (`llm_model_used`), never a silent wrong model.
+- Missing keys: Gnani demo-simulation mode and extractive engine, both reported
+  by `/api/v1/health` (which also reports DB, storage, queue depth).
+- No fake successes: every terminal state reflects what actually happened.
+
+## 6. Frontend (`frontend/`)
+
+Next.js 14 App Router + Tailwind. `/` (upload + history), `/notes/[id]`
+(player, progress, transcript, summary, rename/retry/re-summarize/delete),
+`/architecture`. Browsers call same-origin `/api/*` via nginx; server
+pre-render uses `BACKEND_INTERNAL_URL` (Node `fetch` needs absolute URLs).
+Uploads get client-side extension + size checks mirroring the backend.
+
+## 7. Configuration
+
+Secrets live in `backend/.env` (git-ignored; placeholders in `.env.example`):
+`DATABASE_URL`, `REDIS_URL`, `STORAGE_BACKEND` + S3 keys, `GNANI_API_KEY`,
+`LLM_PROVIDER` + `GEMINI/GROQ/OPENAI` keys + models, `MAX_UPLOAD_SIZE_MB`.
+Tunnel token lives in root `.env` as `CLOUDFLARE_TUNNEL_TOKEN`. See `DEPLOY.md`.
+
+## 8. Tests
+
+24 pytest tests (`backend/app/tests/`): ffprobe validation, normalization
+output, overlap merging, chunk all-fail vs partial-fail, LLM failover +
+placeholder guard, upload/list/status/rename/delete/resummarize endpoints,
+65s chunked e2e, summarizer shape. Run: `pytest app/tests/ -v`.
+
+## 9. With more time
+
+Gnani Batch STT for long files (full-context, zero seams; loses gu-IN/pa-IN),
+SSE instead of status polling, speaker diarization + word timestamps, auth with
+per-user scoping, parallel chunk workers with a token bucket once quotas allow.

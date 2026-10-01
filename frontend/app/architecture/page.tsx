@@ -28,9 +28,12 @@ export default function ArchitecturePage() {
             stitched with overlap-dedup and timestamps. Each successful Gnani call logs its <code>request_id</code>.
           </li>
           <li>
-            The transcript goes through a LangChain summarization chain (Gemini/Groq/OpenAI, extractive fallback with no keys) producing TL;DR,
-            key points, action items, and sentiment. Results persist to Postgres and the note flips to <code>COMPLETED</code>; any failure flips to{" "}
-            <code>FAILED</code> with a visible error and retry endpoint.
+            The transcript goes through a LangChain summarization chain with provider failover: the configured provider first (currently Groq), then any
+            other keyed provider if one fails — so an expired key or exhausted quota no longer kills the summary. <code>.env.example</code>-style
+            placeholder keys are never tried or reported as active. If every provider fails, a labeled rule-based extractive summary is stored instead
+            of nothing. Results persist to Postgres and the note flips to <code>COMPLETED</code>; any failure flips to <code>FAILED</code> with a
+            visible error and retry endpoint. A saved transcript can be re-summarized any time via <code>POST /api/v1/notes/{"{id}"}/summarize</code>{" "}
+            without re-transcribing.
           </li>
           <li>
             The frontend polls lightweight <code>GET /api/v1/notes/{"{id}"}/status</code> every 2s for progress, then loads the full note. Audio plays
@@ -84,6 +87,16 @@ export default function ArchitecturePage() {
           <li>Synchronous: extension/size validation, storage write, DB insert, 202 response, status polling reads, audio streaming.</li>
           <li>Background: storage download, ffprobe, Gnani chunking/transcription, LLM summarization, final DB write, scratch cleanup.</li>
         </ul>
+      </section>
+
+      <section className="grid gap-2 text-sm leading-relaxed">
+        <h2 className="text-lg font-semibold">Deployment</h2>
+        <p>
+          The app is live at <a className="underline" href="https://gnani.harsh-shah.me">https://gnani.harsh-shah.me</a> from a single{" "}
+          <code>docker compose up</code> (Next.js, FastAPI, worker, Postgres, Redis, internal nginx, Cloudflare Tunnel). The host runs Docker at home
+          with no reachable public ports, so a Cloudflare Tunnel container dials out and routes the domain to the internal nginx — TLS terminates at
+          Cloudflare&apos;s edge, and no firewall rules or port forwarding were needed. Uploads up to 500MB (~8+ hours of audio) are accepted end to end.
+        </p>
       </section>
 
       <section className="grid gap-2 text-sm leading-relaxed">

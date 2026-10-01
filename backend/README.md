@@ -14,7 +14,7 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 - **Seam-Dedup Stitching**: Consecutive chunks share ~1s of audio, so the full transcript is stitched with word-level suffix/prefix overlap merging (case/punctuation-insensitive, minimum 3 words to avoid false merges on bigrams like "of the") instead of naive joining. Per-chunk segments keep their original text and timestamps.
 - **AWS S3 Storage Integration**: Audio streams are stored directly in AWS S3 buckets using `boto3`, generating presigned URLs for client streaming. Seamless fallback to local storage for zero-cloud offline development. Local layout preserves partitioning (`<base>/audio/<note_id>/<filename>`) with traversal protection, legacy flat-file fallback, and empty-dir cleanup on delete. Local playback URLs are note-scoped (`/api/v1/notes/{id}/audio`).
 - **Upload Guardrails**: Extension allowlist + `MAX_UPLOAD_SIZE_MB` (default 500MB ≈ 8+ hours of MP3, enforced pre- and post-save with `413` + orphan cleanup) matches Nginx `client_max_body_size 500M` (300s proxy timeouts for slow links).
-- **Visible Failure Tolerance**: Granular exception handling for corrupt files, missing audio streams, Gnani 429 rate limits, and network timeouts with exponential backoff and retry endpoints (`POST /notes/{id}/retry`). Auth failures (401/403, e.g. expired keys) are never retried and surface visibly: a single clip fails the note to `FAILED`, while chunked audio fails only if *all* chunks error — partial chunk failures return the surviving text. An expired LLM key degrades gracefully to the rule-based extractive summary, labeled `langchain-extractive-fallback` in `llm_model_used`. Every successful Gnani call logs its `request_id` for support correlation.
+- **Visible Failure Tolerance**: Granular exception handling for corrupt files, missing audio streams, Gnani 429 rate limits, and network timeouts with exponential backoff and retry endpoints (`POST /notes/{id}/retry`). Auth failures (401/403, e.g. expired keys) are never retried and surface visibly: a single clip fails the note to `FAILED`, while chunked audio fails only if *all* chunks error — partial chunk failures return the surviving text. The LLM summarizer fails over across every keyed provider (configured first), ignores `.env.example`-style placeholder keys entirely, and degrades to a labeled rule-based extractive summary only as a last resort. Saved transcripts can be re-summarized without re-transcribing (`POST /notes/{id}/summarize`). Every successful Gnani call logs its `request_id` for support correlation.
 - **PostgreSQL State Machine**: Tracks status through `UPLOADED` $\rightarrow$ `PREPROCESSING` $\rightarrow$ `TRANSCRIBING` $\rightarrow$ `SUMMARIZING` $\rightarrow$ `COMPLETED` / `FAILED`.
 
 ---
@@ -83,8 +83,18 @@ python scripts/worker.py
 ## 5. Running Tests
 
 ```bash
-# Run full pytest suite — 18 tests: audio inspection, 16kHz normalization,
+# Run full pytest suite — 24 tests: audio inspection, 16kHz normalization,
 # overlap-merge stitching, chunk all-fail vs partial-fail behavior,
+# LLM provider failover + placeholder-key guard, resummarize endpoint,
 # API endpoints, e2e long audio, summarizer
 pytest app/tests/ -v
 ```
+
+---
+
+## 6. Deployment
+
+Live at `https://gnani.harsh-shah.me` via Cloudflare Tunnel (see `../DEPLOY.md`):
+outbound-only `cloudflared` container routes the domain to the internal
+nginx (`/api/*` → backend, `/` → frontend). No public ports required;
+TLS terminates at the Cloudflare edge.
