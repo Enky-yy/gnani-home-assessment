@@ -93,19 +93,41 @@ services:
     ports:
       - "3000:3000"
 
-  # 5. Nginx Reverse Proxy (Handles large audio upload size)
+  # 5. App Nginx (internal routing: /api/* -> backend, docs/health, / -> frontend).
+  # No host ports — Nginx Proxy Manager (below) owns 80/443 and forwards
+  # harsh-shah.me to this service over the compose network.
   nginx:
     image: nginx:alpine
     container_name: audio_notes_nginx
     restart: unless-stopped
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
       - frontend
 
+  # 6. Nginx Proxy Manager — public entrypoint for harsh-shah.me.
+  # Admin UI on http://<server-ip>:81 (default admin@example.com/changeme).
+  # Create Proxy Host: harsh-shah.me -> forward to hostname `nginx`, port 80,
+  # Websockets ON, then SSL -> Request Let's Encrypt certificate, Force SSL.
+  npm:
+    image: jc21/nginx-proxy-manager:2.12.3
+    container_name: audio_notes_npm
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    volumes:
+      - npm_data:/data
+      - npm_ssl:/etc/letsencrypt
+    depends_on:
+      - nginx
+
 volumes:
   postgres_data:
   backend_uploads:
+  npm_data:
+  npm_ssl:
