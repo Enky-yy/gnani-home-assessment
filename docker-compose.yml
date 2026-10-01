@@ -94,8 +94,8 @@ services:
       - "3000:3000"
 
   # 5. App Nginx (internal routing: /api/* -> backend, docs/health, / -> frontend).
-  # No host ports — Nginx Proxy Manager (below) owns 80/443 and forwards
-  # harsh-shah.me to this service over the compose network.
+  # No host ports — the Cloudflare Tunnel (below) forwards harsh-shah.me
+  # to this service over the compose network.
   nginx:
     image: nginx:alpine
     container_name: audio_notes_nginx
@@ -108,26 +108,25 @@ services:
       - backend
       - frontend
 
-  # 6. Nginx Proxy Manager — public entrypoint for harsh-shah.me.
-  # Admin UI on http://<server-ip>:81 (default admin@example.com/changeme).
-  # Create Proxy Host: harsh-shah.me -> forward to hostname `nginx`, port 80,
-  # Websockets ON, then SSL -> Request Let's Encrypt certificate, Force SSL.
-  npm:
-    image: jc21/nginx-proxy-manager:2.12.3
-    container_name: audio_notes_npm
+  # 6. Cloudflare Tunnel — public entrypoint for harsh-shah.me.
+  # No open ports needed: this dials OUT to Cloudflare, which routes
+  # harsh-shah.me -> http://nginx:80 over the tunnel (TLS handled by
+  # Cloudflare edge). Home routers, CGNAT and ISP port-blocks don't matter.
+  # Setup (one time, in Cloudflare dashboard under Zero Trust -> Tunnels):
+  #   1. Create tunnel "audio-notes", copy its token.
+  #   2. Add public hostname: harsh-shah.me -> service http://nginx:80.
+  #   3. Put the token in the project-root .env file
+  #      (auto-loaded by compose, git-ignored):
+  #        CLOUDFLARE_TUNNEL_TOKEN=eyJh...
+  #      then sudo docker compose up -d
+  tunnel:
+    image: cloudflare/cloudflared:2026.1.1
+    container_name: audio_notes_tunnel
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "81:81"
-    volumes:
-      - npm_data:/data
-      - npm_ssl:/etc/letsencrypt
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - nginx
 
 volumes:
   postgres_data:
   backend_uploads:
-  npm_data:
-  npm_ssl:
