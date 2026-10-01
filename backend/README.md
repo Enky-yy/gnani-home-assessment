@@ -29,6 +29,7 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 | `GET` | `/api/v1/notes/{id}/status`| Fast polling endpoint for real-time progress percentage & current step. |
 | `GET` | `/api/v1/notes/{id}/audio` | Stream audio file directly or redirect to presigned S3 URL. |
 | `POST` | `/api/v1/notes/{id}/retry` | Re-trigger processing on a failed or stuck note. |
+| `POST` | `/api/v1/notes/{id}/summarize` | Re-run LLM summarization on the stored transcript (no re-transcription). |
 | `PATCH`| `/api/v1/notes/{id}/title` | Rename an audio note title. |
 | `DELETE`| `/api/v1/notes/{id}` | Delete note and purge audio blob from S3 storage. |
 | `GET` | `/api/v1/health` | Deep diagnostic health check (DB, S3, Gnani, LLM status). |

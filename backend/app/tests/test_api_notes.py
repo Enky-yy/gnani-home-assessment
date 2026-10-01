@@ -100,3 +100,59 @@ async def test_upload_and_retrieve_note(async_client: AsyncClient):
     # 6. Verify 404 after deletion
     get_after_del = await async_client.get(f"/api/v1/notes/{note_id}")
     assert get_after_del.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resummarize_existing_transcript(async_client: AsyncClient, db_session):
+    from app.models.audio_note import AudioNote, ProcessingStatus
+
+    note = AudioNote(
+        id="test-resum-01",
+        title="Resum Test",
+        original_filename="r.wav",
+        file_size_bytes=10,
+        mime_type="audio/wav",
+        storage_backend="local",
+        storage_path="audio/test-resum-01/r.wav",
+        status=ProcessingStatus.COMPLETED,
+        progress_percentage=100,
+        current_step="done",
+        language_code="en-IN",
+        raw_transcript="The team agreed to launch on Friday. Rahul will prepare the release notes. The budget was approved unanimously.",
+    )
+    db_session.add(note)
+    await db_session.commit()
+
+    resp = await async_client.post("/api/v1/notes/test-resum-01/summarize")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["summary_tldr"]
+    # Test env has no LLM keys -> extractive fallback, still labeled
+    assert data["llm_model_used"] == "langchain-extractive-fallback"
+
+
+@pytest.mark.asyncio
+async def test_resummarize_without_transcript_rejected(async_client: AsyncClient, db_session):
+    from app.models.audio_note import AudioNote, ProcessingStatus
+
+    note = AudioNote(
+        id="test-resum-02",
+        title="Empty Note",
+        original_filename="e.wav",
+        file_size_bytes=10,
+        mime_type="audio/wav",
+        storage_backend="local",
+        storage_path="audio/test-resum-02/e.wav",
+        status=ProcessingStatus.FAILED,
+        progress_percentage=100,
+        current_step="failed",
+        language_code="en-IN",
+    )
+    db_session.add(note)
+    await db_session.commit()
+
+    resp = await async_client.post("/api/v1/notes/test-resum-02/summarize")
+    assert resp.status_code == 400
+
+    resp404 = await async_client.post("/api/v1/notes/does-not-exist/summarize")
+    assert resp404.status_code == 404

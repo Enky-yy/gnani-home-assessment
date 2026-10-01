@@ -151,6 +151,11 @@ export async function retryNote(id: string): Promise<AudioNoteDetail> {
   return handle<AudioNoteDetail>(res);
 }
 
+export async function resummarizeNote(id: string): Promise<AudioNoteDetail> {
+  const res = await fetch(url(`/api/v1/notes/${id}/summarize`), { method: "POST" });
+  return handle<AudioNoteDetail>(res);
+}
+
 export async function renameNote(id: string, title: string): Promise<AudioNoteDetail> {
   const res = await fetch(url(`/api/v1/notes/${id}/title`), {
     method: "PATCH",

@@ -11,6 +11,7 @@ import {
   getNote,
   getNoteStatus,
   renameNote,
+  resummarizeNote,
   retryNote,
   type AudioNoteDetail,
 } from "@/lib/api";
@@ -73,6 +74,19 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
       setNote(updated);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Retry failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onResummarize() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const updated = await resummarizeNote(id);
+      setNote(updated);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Re-summarize failed.");
     } finally {
       setBusy(false);
     }
@@ -155,6 +169,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
           {note.status === "FAILED" && (
             <button onClick={onRetry} disabled={busy} className="rounded-md bg-zinc-900 px-3 py-1.5 text-white disabled:opacity-50">
               {busy ? "Retrying…" : "Retry processing"}
+            </button>
+          )}
+          {note.raw_transcript && (
+            <button onClick={onResummarize} disabled={busy} className="rounded-md border px-3 py-1.5" title="Re-run only the LLM summary on the existing transcript (no re-transcription)">
+              {busy ? "Summarizing…" : "Re-summarize"}
             </button>
           )}
           <button onClick={onDelete} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-red-700">

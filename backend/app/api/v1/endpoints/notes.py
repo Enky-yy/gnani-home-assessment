@@ -30,6 +30,7 @@ from app.schemas.audio_note import (
 from app.services.storage import StorageService
 from app.services.job_runner import process_audio_note_job
 from app.services.queue import enqueue_audio_job
+from app.services.summarizer import SummarizerService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -304,6 +305,53 @@ async def retry_audio_note(
     else:
         logger.info(f"Re-enqueued Redis processing for note {note_id} (retry #{note.retry_count})")
 
+    return note
+
+
+@router.post(
+    "/{note_id}/summarize",
+    response_model=AudioNoteResponse,
+    summary="Re-run LLM summarization on the existing transcript",
+)
+async def resummarize_note(
+    note_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-summarize without re-transcribing (e.g. after swapping LLM keys).
+
+    Uses the stored raw transcript only — no Gnani call, no audio needed.
+    """
+    result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
+    note = result.scalar_one_or_none()
+
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if not note.raw_transcript or not note.raw_transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No transcript to summarize yet. Transcribe the note first.",
+        )
+
+    try:
+        summary_data = await SummarizerService().summarize(note.raw_transcript)
+    except Exception as e:
+        logger.error(f"Summarization failed for note {note_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Summarization failed: {str(e)}",
+        )
+
+    note.summary_tldr = summary_data.get("tldr")
+    note.summary_key_points = summary_data.get("key_points", [])
+    note.summary_action_items = summary_data.get("action_items", [])
+    note.summary_sentiment = summary_data.get("sentiment", "Neutral")
+    note.llm_model_used = summary_data.get("model_used", "unknown")
+    note.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(note)
+    logger.info(f"Re-summarized note {note_id} with {note.llm_model_used}")
     return note
 
 
