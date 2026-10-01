@@ -94,7 +94,7 @@ services:
       - "3000:3000"
 
   # 5. App Nginx (internal routing: /api/* -> backend, docs/health, / -> frontend).
-  # No host ports — the Cloudflare Tunnel (below) forwards harsh-shah.me
+  # No host ports — the Cloudflare Tunnel (below) forwards gnani.harsh-shah.me
   # to this service over the compose network.
   nginx:
     image: nginx:alpine
@@ -108,13 +108,13 @@ services:
       - backend
       - frontend
 
-  # 6. Cloudflare Tunnel — public entrypoint for harsh-shah.me.
+  # 6. Cloudflare Tunnel — public entrypoint for gnani.harsh-shah.me.
   # No open ports needed: this dials OUT to Cloudflare, which routes
-  # harsh-shah.me -> http://nginx:80 over the tunnel (TLS handled by
+  # gnani.harsh-shah.me -> http://nginx:80 over the tunnel (TLS handled by
   # Cloudflare edge). Home routers, CGNAT and ISP port-blocks don't matter.
   # Setup (one time, in Cloudflare dashboard under Zero Trust -> Tunnels):
   #   1. Create tunnel "audio-notes", copy its token.
-  #   2. Add public hostname: harsh-shah.me -> service http://nginx:80.
+  #   2. Add public hostname: gnani.harsh-shah.me -> service http://nginx:80.
   #   3. Put the token in the project-root .env file
   #      (auto-loaded by compose, git-ignored):
   #        CLOUDFLARE_TUNNEL_TOKEN=eyJh...
