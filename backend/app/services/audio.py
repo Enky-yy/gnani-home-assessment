@@ -160,15 +160,25 @@ class AudioService:
         return chunks
 
     @staticmethod
-    def normalize_to_wav(input_path: str, output_path: str) -> str:
-        """Transcode any audio file to clean 16kHz mono 16-bit PCM WAV."""
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    def normalize_to_wav(input_path: str, output_path: str, loudness: bool = True) -> str:
+        """Transcode any audio file to clean 16kHz mono 16-bit PCM WAV.
+
+        Applies a speech-band filter chain (80Hz highpass to cut rumble/wind,
+        7.5kHz lowpass to cut hiss) plus EBU R128 loudness normalization so
+        quiet phone recordings and loud compressed clips (e.g. YouTube rips)
+        hit the ASR engine at a consistent level.
+        """
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        audio_filter = "highpass=f=80,lowpass=f=7500"
+        if loudness:
+            audio_filter += ",loudnorm=I=-16:TP=-1.5:LRA=11"
         cmd = [
             "ffmpeg",
             "-y",
             "-i", input_path,
             "-ar", "16000",
             "-ac", "1",
+            "-af", audio_filter,
             "-c:a", "pcm_s16le",
             output_path,
         ]

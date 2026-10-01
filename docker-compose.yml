@@ -78,7 +78,22 @@ services:
     volumes:
       - backend_uploads:/app/uploads
 
-  # 4. Nginx Reverse Proxy (Handles large audio upload size)
+  # 4. Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: audio_notes_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Server-side pre-render calls backend directly (browser still uses same-origin /api/*).
+      BACKEND_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
+  # 5. Nginx Reverse Proxy (Handles large audio upload size)
   nginx:
     image: nginx:alpine
     container_name: audio_notes_nginx
@@ -89,6 +104,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
+      - frontend
 
 volumes:
   postgres_data:

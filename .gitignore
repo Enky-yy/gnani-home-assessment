@@ -58,3 +58,9 @@ backend/temp_chunks/
 node_modules/
 .next/
 out/
+
+# Build caches
+*.tsbuildinfo
+
+# ...but frontend source lib/ is real code (negates the Python lib/ rule above)
+!frontend/lib/

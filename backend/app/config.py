@@ -49,8 +49,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
 
-    # Upload Constraints
-    MAX_UPLOAD_SIZE_MB: int = 100
+    # Upload Constraints (500MB ≈ 8+ hours of MP3 / 4+ hours of WAV —
+    # effectively any recording a user would upload, while still bounding disk abuse)
+    MAX_UPLOAD_SIZE_MB: int = 500
     ALLOWED_EXTENSIONS: List[str] = ["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm"]
 
     # Background job queue (Redis). Empty/disabled -> in-process BackgroundTasks fallback.

@@ -35,11 +35,23 @@ async def run_once(timeout: int = 30) -> bool:
         logger.error("REDIS_URL is not configured. Worker has nothing to consume.")
         return False
 
-    client = aioredis.from_url(settings.REDIS_URL)
+    client = aioredis.from_url(
+        settings.REDIS_URL,
+        socket_connect_timeout=5,
+        # Must exceed the BLPOP blocking timeout or the client gives up
+        # waiting while the server is still (correctly) blocked.
+        socket_timeout=timeout + 10,
+    )
     try:
         item = await client.blpop(settings.JOB_QUEUE_NAME, timeout=timeout)
+    except Exception as e:
+        logger.warning(f"Redis BLPOP failed ({e}); will retry on next loop.")
+        return False
     finally:
-        await client.close()
+        try:
+            await client.aclose()
+        except Exception:
+            pass
 
     if not item:
         return False

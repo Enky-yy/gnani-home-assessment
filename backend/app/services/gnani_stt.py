@@ -27,6 +27,42 @@ class GnaniSTTError(Exception):
         self.retryable = retryable
 
 
+def _canon_word(word: str) -> str:
+    """Canonical form for overlap comparison: lowercase, punctuation stripped."""
+    return word.lower().strip(".,!?;:\"'()[]{}")
+
+
+def merge_overlap_texts(texts: List[str], max_window: int = 20, min_overlap: int = 3) -> str:
+    """Stitch chunk transcripts, collapsing duplicated overlap regions.
+
+    Consecutive chunks share ~1s of audio, so the tail of chunk N and the head
+    of chunk N+1 usually contain the same words. Finds the longest word-level
+    suffix/prefix match and drops the duplicate instead of naive joining.
+    """
+    merged: List[str] = []
+    merged_canon: List[str] = []
+    for text in texts:
+        words = [w for w in text.split() if w.strip()]
+        if not words:
+            continue
+        if not merged:
+            merged = list(words)
+            merged_canon = [_canon_word(w) for w in words]
+            continue
+        canon = [_canon_word(w) for w in words]
+        best = 0
+        limit = min(len(merged_canon), len(canon), max_window)
+        for k in range(limit, min_overlap - 1, -1):
+            if not merged_canon[-k:]:
+                continue
+            if merged_canon[-k:] == canon[:k]:
+                best = k
+                break
+        merged.extend(words[best:])
+        merged_canon.extend(canon[best:])
+    return " ".join(merged)
+
+
 class GnaniSTTClient:
     """Production client for Gnani Voice AI STT APIs with REST, Chunked, and Batch fallback."""
 
@@ -56,11 +92,15 @@ class GnaniSTTClient:
         file_path: str,
         language_code: str = "en-IN",
         max_retries: int = 3,
+        normalize_input: bool = True,
     ) -> str:
         """
         Transcribe an audio clip (<= GNANI_MAX_REST_AUDIO_SECONDS, 25s by default)
         using Gnani's synchronous REST STT endpoint.
-        Includes exponential backoff retry for transient network and 429/5xx errors.
+        The clip is first normalized to clean 16kHz mono WAV with speech-band
+        filtering and loudness normalization (chunks skip this — the chunker
+        already outputs normalized WAVs). Includes exponential backoff retry
+        for transient network and 429/5xx errors.
         """
         if self.is_demo_mode:
             await asyncio.sleep(1.5)  # Simulate network latency
@@ -83,13 +123,26 @@ class GnaniSTTClient:
         except Exception as e:
             logger.debug(f"Audio pre-inspection check bypassed: {e}")
 
-        file_name = os.path.basename(file_path)
-        mime_type = "audio/wav" if file_path.endswith(".wav") else "audio/mpeg"
+        # Normalize to the ASR-ideal format instead of uploading raw container
+        # audio (e.g. 48kHz stereo webm from YouTube downloads).
+        send_path = file_path
+        if normalize_input:
+            base, _ = os.path.splitext(file_path)
+            norm_path = f"{base}.norm16k.wav"
+            try:
+                AudioService.normalize_to_wav(file_path, norm_path)
+                send_path = norm_path
+                logger.info(f"Normalized {file_path} -> {norm_path} (16kHz mono) for Gnani REST STT.")
+            except Exception as e:
+                logger.warning(f"Normalization failed ({e}); sending original file.")
+
+        file_name = os.path.basename(send_path)
+        mime_type = "audio/wav" if send_path.endswith(".wav") else "audio/mpeg"
 
         for attempt in range(1, max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=45.0) as client:
-                    with open(file_path, "rb") as f:
+                    with open(send_path, "rb") as f:
                         files = {"audio_file": (file_name, f, mime_type)}
                         data = {
                             "language_code": language_code,
@@ -108,7 +161,11 @@ class GnaniSTTClient:
                     if response.status_code == 200:
                         res_json = response.json()
                         transcript = res_json.get("transcript", "").strip()
-                        logger.info(f"Gnani REST STT success: received {len(transcript)} chars.")
+                        request_id = res_json.get("request_id")
+                        logger.info(
+                            f"Gnani REST STT success: received {len(transcript)} chars."
+                            + (f" request_id={request_id}" if request_id else "")
+                        )
                         return transcript
                     
                     elif response.status_code == 429:
@@ -164,19 +221,28 @@ class GnaniSTTClient:
         total_chunks = len(chunks)
         semaphore = asyncio.Semaphore(1)  # Serialized execution to prevent Gnani 429 rate limits
         completed_count = 0
+        failed_count = 0
+        last_error: Optional[str] = None
         segments: List[Dict[str, Any]] = []
 
         async def process_chunk(chunk: AudioChunk) -> Dict[str, Any]:
-            nonlocal completed_count
+            nonlocal completed_count, failed_count, last_error
             async with semaphore:
                 try:
-                    text = await self.transcribe_short_audio(chunk.file_path, language_code=language_code)
+                    # Chunks are already 16kHz mono WAVs — skip re-normalization.
+                    text = await self.transcribe_short_audio(
+                        chunk.file_path, language_code=language_code, normalize_input=False
+                    )
                 except GnaniSTTError as ge:
+                    failed_count += 1
+                    last_error = str(ge)
                     logger.warning(
                         f"Gnani chunk {chunk.chunk_index} ({chunk.start_time:.1f}-{chunk.end_time:.1f}s) notice: {ge}. Continuing..."
                     )
                     text = ""
                 except Exception as e:
+                    failed_count += 1
+                    last_error = str(e)
                     logger.warning(
                         f"Unexpected error on chunk {chunk.chunk_index}: {e}. Continuing..."
                     )
@@ -203,9 +269,19 @@ class GnaniSTTClient:
         # Sort results strictly by start time
         results.sort(key=lambda x: x["start"])
 
-        # Stitch full transcript text
+        # Every chunk errored (e.g. expired/revoked API key → 401 on all
+        # chunks): fail loudly instead of shipping a "[No speech detected]"
+        # placeholder as COMPLETED. Partial failures still return what worked.
+        if total_chunks > 0 and failed_count >= total_chunks:
+            raise GnaniSTTError(
+                f"All {total_chunks} audio chunks failed transcription. "
+                f"Last error: {last_error}"
+            )
+
+        # Stitch full transcript text, collapsing duplicated overlap regions
+        # at chunk seams (per-chunk segments keep their original text).
         full_text_parts = [r["text"] for r in results if r["text"].strip()]
-        full_transcript = " ".join(full_text_parts) if full_text_parts else "[No speech detected in recording]"
+        full_transcript = merge_overlap_texts(full_text_parts) if full_text_parts else "[No speech detected in recording]"
 
         # Cleanup chunk files
         for c in chunks:
