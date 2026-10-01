@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+.next
+backend/.venv
+backend/uploads
+backend/temp_chunks
+*.db
+*.sqlite3
+.pytest_cache
+__pycache__
+*.pyc
+.env.local
