@@ -9,3 +9,22 @@
 body {
   @apply bg-zinc-50 text-zinc-900 antialiased;
 }
+
+/* Indeterminate loading bar (single-shot jobs with no % to report, e.g. re-summarize) */
+@keyframes indeterminate-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.indeterminate-track {
+  @apply h-2 w-full overflow-hidden rounded-full bg-zinc-200;
+}
+
+.indeterminate-fill {
+  @apply h-full w-1/4 rounded-full bg-zinc-900;
+  animation: indeterminate-slide 1.2s ease-in-out infinite;
+}

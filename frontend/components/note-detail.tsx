@@ -23,6 +23,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
   const [loadError, setLoadError] = useState<string | null>(initial ? null : "Note not found.");
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(initial?.title ?? "");
 
@@ -81,6 +82,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
 
   async function onResummarize() {
     setBusy(true);
+    setSummarizing(true);
     setActionError(null);
     try {
       const updated = await resummarizeNote(id);
@@ -89,6 +91,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
       setActionError(err instanceof Error ? err.message : "Re-summarize failed.");
     } finally {
       setBusy(false);
+      setSummarizing(false);
     }
   }
 
@@ -213,6 +216,14 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
 
       <div className="rounded-lg border bg-white p-4 shadow-sm">
         <h2 className="font-semibold">Summary</h2>
+        {summarizing && (
+          <div className="mt-2" role="status" aria-label="Summarizing in progress">
+            <div className="indeterminate-track">
+              <div className="indeterminate-fill" />
+            </div>
+            <p className="mt-1 text-sm text-zinc-600">Summarizing with AI…</p>
+          </div>
+        )}
         {!note.summary_tldr ? (
           <p className="mt-2 text-sm text-zinc-600">{processing ? "Summary will appear after transcription…" : "No summary yet."}</p>
         ) : (
