@@ -99,16 +99,6 @@ export default function ArchitecturePage() {
         </p>
       </section>
 
-      <section className="grid gap-2 text-sm leading-relaxed">
-        <h2 className="text-lg font-semibold">With more time</h2>
-        <ul className="list-disc pl-5">
-          <li>Replace polling with server-sent events for progress.</li>
-          <li>Add speaker diarization display and word-level timestamps.</li>
-          <li>Add auth, per-user note scoping, and full-text search ranking.</li>
-          <li>Move chunk transcription to parallel workers with a token bucket once Gnani quotas allow.</li>
-          <li>Evaluate Gnani Batch STT for long files: one full-context pass with zero seams, at the cost of async job polling and no gu-IN/pa-IN support.</li>
-        </ul>
-      </section>
     </article>
   );
 }
