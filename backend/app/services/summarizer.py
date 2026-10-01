@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import Runnable
 
-from app.config import settings
+from app.config import settings, is_configured_key
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +55,14 @@ class SummarizerService:
             "groq": settings.GROQ_API_KEY,
             "openai": settings.OPENAI_API_KEY,
         }
-        available = [p for p in order if keys.get(p) and str(keys.get(p)).strip()]
+        available = [p for p in order if is_configured_key(keys.get(p))]
         if not available:
             logger.info("No LLM API keys configured. Using local extractive engine.")
         return available
 
     def _build_llm(self, provider: str) -> Tuple[Optional[Any], Optional[str]]:
         """Instantiate the LangChain chat model for one provider."""
-        if provider == "gemini" and settings.GEMINI_API_KEY:
+        if provider == "gemini" and is_configured_key(settings.GEMINI_API_KEY):
             from langchain_google_genai import ChatGoogleGenerativeAI
             return (
                 ChatGoogleGenerativeAI(
@@ -73,7 +73,7 @@ class SummarizerService:
                 f"gemini/{settings.GEMINI_MODEL}",
             )
 
-        if provider == "groq" and settings.GROQ_API_KEY:
+        if provider == "groq" and is_configured_key(settings.GROQ_API_KEY):
             from langchain_groq import ChatGroq
             return (
                 ChatGroq(
@@ -84,7 +84,7 @@ class SummarizerService:
                 f"groq/{settings.GROQ_MODEL}",
             )
 
-        if provider == "openai" and settings.OPENAI_API_KEY:
+        if provider == "openai" and is_configured_key(settings.OPENAI_API_KEY):
             from langchain_openai import ChatOpenAI
             return (
                 ChatOpenAI(

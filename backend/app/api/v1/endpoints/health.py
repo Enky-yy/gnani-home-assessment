@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.api.deps import get_db, get_storage
-from app.config import settings
+from app.config import settings, is_configured_key
 from app.services.storage import StorageService
 
 router = APIRouter()
@@ -63,7 +63,7 @@ async def health_check(
     gnani_status = "active" if has_gnani_key else "demo-simulation-mode (no GNANI_API_KEY)"
 
     # Check LLM configuration
-    has_llm_key = bool(settings.GEMINI_API_KEY or settings.GROQ_API_KEY or settings.OPENAI_API_KEY)
+    has_llm_key = any(is_configured_key(k) for k in (settings.GEMINI_API_KEY, settings.GROQ_API_KEY, settings.OPENAI_API_KEY))
     llm_status = f"active ({settings.LLM_PROVIDER})" if has_llm_key else "extractive-fallback-mode"
 
     return {

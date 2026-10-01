@@ -71,3 +71,20 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def is_configured_key(value: Optional[str]) -> bool:
+    """True only for a real key — ignores empty values and .env.example
+    placeholders like 'your_groq_api_key_here' so they are never treated
+    as configured or sent to provider APIs (which just 401)."""
+    v = (value or "").strip().strip("\"'")
+    if not v:
+        return False
+    lowered = v.lower()
+    return not (
+        lowered.startswith("your_")
+        or lowered.endswith("_here")
+        or "example" in lowered
+        or "placeholder" in lowered
+        or "changeme" in lowered
+    )

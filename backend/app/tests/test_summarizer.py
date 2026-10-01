@@ -68,3 +68,24 @@ async def test_summarizer_all_providers_down_uses_extractive(monkeypatch):
     result = await svc.summarize("First sentence here. Second sentence here for the fallback engine.")
     assert result["model_used"] == "langchain-extractive-fallback"
     assert result["tldr"]
+
+
+def test_placeholder_keys_are_not_configured():
+    from app.config import is_configured_key
+
+    assert is_configured_key("your_groq_api_key_here") is False
+    assert is_configured_key("YOUR_OPENAI_KEY_HERE") is False
+    assert is_configured_key("") is False
+    assert is_configured_key(None) is False
+    assert is_configured_key("gsk_realkey123") is True
+
+
+def test_provider_order_ignores_placeholders(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config.settings, "LLM_PROVIDER", "openai")
+    monkeypatch.setattr(config.settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(config.settings, "GROQ_API_KEY", "gsk_realkey123")
+    monkeypatch.setattr(config.settings, "OPENAI_API_KEY", "your_openai_api_key_here")
+    svc = SummarizerService()
+    assert svc.provider_order == ["groq"]
