@@ -38,15 +38,30 @@ class SummarizerService:
             )
         ]).partial(format_instructions=self.parser.get_format_instructions())
 
-        # Build active LLM and chain
-        self.llm, self.model_name = self._init_chat_model()
-        self.chain = self._build_chain()
+        # Ordered provider failover list: configured provider first, then any
+        # other provider with a key. A dead key on the primary (401 at call
+        # time) no longer pins us to the fallback — we try the next provider.
+        self.provider_order = self._provider_order()
 
-    def _init_chat_model(self) -> Tuple[Optional[Any], Optional[str]]:
-        """Instantiate the configured LangChain chat model."""
-        provider = settings.LLM_PROVIDER.lower()
+    def _provider_order(self) -> List[str]:
+        """Providers with keys, configured provider first."""
+        order: List[str] = []
+        primary = (settings.LLM_PROVIDER or "").lower()
+        for p in [primary, "gemini", "groq", "openai"]:
+            if p and p not in order:
+                order.append(p)
+        keys = {
+            "gemini": settings.GEMINI_API_KEY,
+            "groq": settings.GROQ_API_KEY,
+            "openai": settings.OPENAI_API_KEY,
+        }
+        available = [p for p in order if keys.get(p) and str(keys.get(p)).strip()]
+        if not available:
+            logger.info("No LLM API keys configured. Using local extractive engine.")
+        return available
 
-        # 1. Primary configured provider
+    def _build_llm(self, provider: str) -> Tuple[Optional[Any], Optional[str]]:
+        """Instantiate the LangChain chat model for one provider."""
         if provider == "gemini" and settings.GEMINI_API_KEY:
             from langchain_google_genai import ChatGoogleGenerativeAI
             return (
@@ -80,55 +95,18 @@ class SummarizerService:
                 f"openai/{settings.OPENAI_MODEL}",
             )
 
-        # 2. Fallback to any available provider key
-        if settings.GEMINI_API_KEY:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return (
-                ChatGoogleGenerativeAI(
-                    model=settings.GEMINI_MODEL,
-                    google_api_key=settings.GEMINI_API_KEY,
-                    temperature=0.2,
-                ),
-                f"gemini/{settings.GEMINI_MODEL}",
-            )
-        elif settings.GROQ_API_KEY:
-            from langchain_groq import ChatGroq
-            return (
-                ChatGroq(
-                    model=settings.GROQ_MODEL,
-                    api_key=settings.GROQ_API_KEY,
-                    temperature=0.2,
-                ),
-                f"groq/{settings.GROQ_MODEL}",
-            )
-        elif settings.OPENAI_API_KEY:
-            from langchain_openai import ChatOpenAI
-            return (
-                ChatOpenAI(
-                    model=settings.OPENAI_MODEL,
-                    api_key=settings.OPENAI_API_KEY,
-                    temperature=0.2,
-                ),
-                f"openai/{settings.OPENAI_MODEL}",
-            )
-
-        logger.info("No LLM API keys configured. Using local extractive engine.")
         return None, None
 
-    def _build_chain(self) -> Optional[Runnable]:
+    def _build_chain(self, llm: Any) -> Optional[Runnable]:
         """Construct the LangChain LCEL chain: Prompt | LLM | Parser."""
-        if not self.llm:
-            return None
-
         try:
             # Prefer with_structured_output when supported
-            structured_llm = self.llm.with_structured_output(AudioSummaryOutput)
-            chain = self.prompt | structured_llm
-            logger.info(f"Initialized LangChain structured output chain with model: {self.model_name}")
-            return chain
+            structured_llm = llm.with_structured_output(AudioSummaryOutput)
+            logger.info("Initialized LangChain structured output chain")
+            return self.prompt | structured_llm
         except Exception as e:
             logger.info(f"Using standard Prompt | LLM | JsonOutputParser chain ({e})")
-            return self.prompt | self.llm | self.parser
+            return self.prompt | llm | self.parser
 
     async def summarize(self, transcript: str) -> Dict[str, Any]:
         """Run the LangChain chain to extract structured audio notes summary."""
@@ -141,11 +119,16 @@ class SummarizerService:
                 "model_used": "none",
             }
 
-        # Execute LangChain chain if active
-        if self.chain:
+        # Try each keyed provider in order; a dead primary key fails over
+        # to the next provider instead of dropping to the heuristic engine.
+        for provider in self.provider_order:
+            llm, model_name = self._build_llm(provider)
+            if llm is None:
+                continue
             try:
-                logger.info(f"Invoking LangChain summarization chain with model: {self.model_name}")
-                result = await self.chain.ainvoke({"transcript": transcript})
+                logger.info(f"Invoking LangChain summarization (provider: {model_name})")
+                chain = self._build_chain(llm)
+                result = await chain.ainvoke({"transcript": transcript})
 
                 # Handle output whether Pydantic object or dict
                 if isinstance(result, AudioSummaryOutput):
@@ -154,7 +137,7 @@ class SummarizerService:
                         "key_points": result.key_points,
                         "action_items": result.action_items,
                         "sentiment": result.sentiment,
-                        "model_used": self.model_name,
+                        "model_used": model_name,
                     }
                 elif isinstance(result, dict):
                     return {
@@ -162,10 +145,12 @@ class SummarizerService:
                         "key_points": result.get("key_points", []),
                         "action_items": result.get("action_items", []),
                         "sentiment": result.get("sentiment", "Neutral"),
-                        "model_used": self.model_name,
+                        "model_used": model_name,
                     }
             except Exception as e:
-                logger.error(f"LangChain chain execution failed: {e}. Falling back to extractive engine.")
+                logger.warning(f"LLM provider {provider} failed ({e}); trying next provider.")
+
+        logger.error("All LLM providers failed. Falling back to extractive engine.")
 
         # Offline / zero-key fallback
         return self._extractive_summary_fallback(transcript)
