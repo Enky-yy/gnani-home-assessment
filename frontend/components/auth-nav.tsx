@@ -1,27 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { fetchMe, getToken, isUnauthorized, logout, type UserRead } from "@/lib/api";
 
 export function AuthNav() {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<UserRead | null>(null);
   const [checked, setChecked] = useState(false);
 
+  // Re-check on every navigation: layout persists across route changes,
+  // so a mount-only fetch would stay stuck showing the pre-login state.
   useEffect(() => {
+    let cancelled = false;
+    setChecked(false);
     if (!getToken()) {
+      setUser(null);
       setChecked(true);
       return;
     }
     fetchMe()
-      .then(setUser)
+      .then((u) => {
+        if (!cancelled) setUser(u);
+      })
       .catch((err) => {
         if (isUnauthorized(err)) logout();
-        setUser(null);
+        if (!cancelled) setUser(null);
       })
-      .finally(() => setChecked(true));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   function onLogout() {
     logout();
