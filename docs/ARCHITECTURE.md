@@ -83,6 +83,9 @@ access returns 404 (no existence leak), legacy ownerless rows are hidden from
 everyone. Audio streams via authenticated blob fetch (the `<audio>` element
 can't send headers). `init_db` adds the column idempotently for pre-auth
 databases. Secrets: `JWT_SECRET` in `backend/.env` (generated random).
+Reviewers skip registration via the public demo account
+(`demo@example.com` / `demo1234`, seeded with 2 completed notes by
+`scripts/seed_demo_data.py`, credentials shown on `/login`).
 
 ## 7. Frontend (`frontend/`)
 

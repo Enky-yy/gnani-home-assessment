@@ -17,7 +17,9 @@ export default function ArchitecturePage() {
           <li>
             Browser posts <code>multipart/form-data</code> to <code>POST /api/v1/notes</code> through nginx (500MB limit, ~8+ hours of audio). The backend
             validates extension and size, stores the stream, inserts a PostgreSQL row in <code>UPLOADED</code>, and returns 202 with the note id.
-            All note endpoints require login (email + password, JWT bearer token) and notes are private per account.
+            All note endpoints require login (email + password, JWT bearer token) and notes are private per account. Reviewers can skip
+            registration with the demo account (<code>demo@example.com</code> / <code>demo1234</code>, shown on the login page) which
+            comes with two completed sample notes.
           </li>
           <li>
             The note id is pushed to the Redis list <code>audio_notes:jobs</code>. The <code>worker</code> service pops it and runs{" "}

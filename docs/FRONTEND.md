@@ -6,7 +6,7 @@
 |---|---|
 | `/` | Upload dropzone (extension + 500MB client checks) + private history list |
 | `/notes/[id]` | Audio player, live progress, transcript segments, summary, rename / retry / re-summarize / delete |
-| `/login` | Login / register toggle (min 8-char password) |
+| `/login` | Login / register toggle (min 8-char password); shows public demo credentials (`demo@example.com` / `demo1234`) |
 | `/architecture` | In-app architecture writeup with repo link |
 
 ## Data fetching: two contexts

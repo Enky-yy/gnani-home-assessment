@@ -57,8 +57,9 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your AWS S3 and Gnani credentials
 
-# 3. Seed demo data (optional, for immediate preview)
+# 3. Seed demo data (public demo login + 2 sample notes, idempotent)
 python scripts/seed_demo_data.py
+# Reviewers log in as demo@example.com / demo1234 — no registration needed.
 
 # 4. Start development server
 uvicorn app.main:app --reload --port 8000

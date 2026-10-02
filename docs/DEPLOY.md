@@ -21,7 +21,11 @@ the Cloudflare edge (automatic certificate).
    CLOUDFLARE_TUNNEL_TOKEN=eyJh...
    ```
 4. `sudo docker compose up -d`
-5. Open `https://gnani.harsh-shah.me` and upload a file end to end.
+5. Seed the public demo login (idempotent — safe to re-run):
+   `sudo docker compose exec backend python scripts/seed_demo_data.py`
+6. Open `https://gnani.harsh-shah.me` and log in as `demo@example.com` /
+   `demo1234` — two completed sample notes are waiting, or register your own
+   account and upload a file end to end.
 
 ## Runtime notes
 
