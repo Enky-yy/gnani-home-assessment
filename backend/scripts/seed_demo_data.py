@@ -7,8 +7,16 @@ from datetime import datetime, timezone, timedelta
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from sqlalchemy import select
 from app.database import AsyncSessionLocal, init_db
 from app.models.audio_note import AudioNote, ProcessingStatus
+from app.models.user import User
+from app.services.auth import hash_password
+
+# Public demo account for reviewers: log in with these on /login,
+# no registration needed. Credentials are intentionally committed.
+DEMO_EMAIL = "demo@example.com"
+DEMO_PASSWORD = "demo1234"
 
 
 DEMO_NOTES = [
@@ -136,9 +144,30 @@ async def seed_data():
     await init_db()
 
     async with AsyncSessionLocal() as session:
+        # Idempotent demo user (reviewers log in with DEMO_EMAIL/DEMO_PASSWORD)
+        result = await session.execute(select(User).where(User.email == DEMO_EMAIL))
+        demo_user = result.scalar_one_or_none()
+        if not demo_user:
+            demo_user = User(email=DEMO_EMAIL, password_hash=hash_password(DEMO_PASSWORD))
+            session.add(demo_user)
+            await session.commit()
+            await session.refresh(demo_user)
+            print(f"Created demo user {DEMO_EMAIL} / {DEMO_PASSWORD}")
+        else:
+            print(f"Demo user {DEMO_EMAIL} already exists, reusing.")
+
+        # Idempotent demo notes owned by the demo user (visible right after login)
+        existing = await session.execute(
+            select(AudioNote.id).where(AudioNote.owner_id == demo_user.id).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            print("Demo notes already seeded, skipping.")
+            return
+
         for idx, item in enumerate(DEMO_NOTES):
             note = AudioNote(
                 id=str(uuid.uuid4()),
+                owner_id=demo_user.id,
                 title=item["title"],
                 original_filename=item["original_filename"],
                 file_size_bytes=item["file_size_bytes"],

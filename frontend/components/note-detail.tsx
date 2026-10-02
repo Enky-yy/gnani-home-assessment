@@ -154,6 +154,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
           router.push("/login");
           return;
         }
+        // Seeded demo notes reference external sample audio — play it directly.
+        if (note?.audio_url?.startsWith("http")) {
+          setAudioUrl(note.audio_url);
+          return;
+        }
         setAudioError(err instanceof Error ? err.message : "Could not load audio.");
       });
     return () => {

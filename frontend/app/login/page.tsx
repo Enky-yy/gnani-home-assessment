@@ -41,6 +41,10 @@ export default function LoginPage() {
     <div className="mx-auto mt-10 max-w-sm rounded-lg border bg-white p-6 shadow-sm">
       <h1 className="text-xl font-semibold">{mode === "login" ? "Log in" : "Create account"}</h1>
       <p className="mt-1 text-sm text-zinc-600">Your uploads are private to your account.</p>
+      <p className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+        Just looking? Use the demo account: <code className="font-mono">demo@example.com</code> /{" "}
+        <code className="font-mono">demo1234</code>
+      </p>
       <form onSubmit={onSubmit} className="mt-4 grid gap-3">
         <label className="grid gap-1 text-sm">
           Email
