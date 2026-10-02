@@ -18,11 +18,12 @@ sudo docker compose up --build -d
 # 3. Open http://localhost (or the public domain, see DEPLOY.md)
 ```
 
-## Docs
+## Docs (all in `docs/`)
 
-- `ARCHITECTURE.md` — full technical writeup (also served in-app at `/architecture`).
-- `backend/README.md` — API reference, local dev, worker, tests.
-- `DEPLOY.md` — public deployment via Cloudflare Tunnel, secrets, runbook.
+- `docs/ARCHITECTURE.md` — full technical writeup (also served in-app at `/architecture`).
+- `docs/BACKEND.md` — API reference, local dev, worker, tests.
+- `docs/FRONTEND.md` — routes, data fetching, auth flow, env vars.
+- `docs/DEPLOY.md` — public deployment via Cloudflare Tunnel, secrets, runbook.
 
 ## Tests
 

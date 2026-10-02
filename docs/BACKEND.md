@@ -98,7 +98,7 @@ pytest app/tests/ -v
 
 ## 6. Deployment
 
-Live at `https://gnani.harsh-shah.me` via Cloudflare Tunnel (see `../DEPLOY.md`):
+Live at `https://gnani.harsh-shah.me` via Cloudflare Tunnel (see `DEPLOY.md`):
 outbound-only `cloudflared` container routes the domain to the internal
 nginx (`/api/*` → backend, `/` → frontend). No public ports required;
 TLS terminates at the Cloudflare edge.
