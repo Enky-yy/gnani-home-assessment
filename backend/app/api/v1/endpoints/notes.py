@@ -18,7 +18,8 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, desc
 
-from app.api.deps import get_db, get_storage
+from app.api.deps import get_db, get_storage, get_current_user
+from app.models.user import User
 from app.config import settings
 from app.models.audio_note import AudioNote, ProcessingStatus
 from app.schemas.audio_note import (
@@ -49,6 +50,7 @@ async def upload_audio_note(
     language_code: str = Form("en-IN", description="BCP-47 language code (e.g. en-IN, hi-IN)"),
     db: AsyncSession = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload an audio file of any size or duration.
@@ -118,6 +120,7 @@ async def upload_audio_note(
     # Create Database Record
     new_note = AudioNote(
         id=note_id,
+        owner_id=current_user.id,
         title=resolved_title,
         original_filename=filename,
         file_size_bytes=file_size,
@@ -156,9 +159,10 @@ async def list_audio_notes(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Retrieve history of uploaded notes, ordered chronologically newest first."""
-    query = select(AudioNote).order_by(desc(AudioNote.created_at))
+    query = select(AudioNote).where(AudioNote.owner_id == current_user.id).order_by(desc(AudioNote.created_at))
 
     if q and q.strip():
         search_filter = f"%{q.strip()}%"
@@ -186,12 +190,19 @@ async def get_audio_note(
     note_id: str,
     db: AsyncSession = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
 ):
     """Retrieve full details for an audio note including timestamped segments."""
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Audio note '{note_id}' not found.",
+        )
+
+    if note.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Audio note '{note_id}' not found.",
@@ -212,12 +223,19 @@ async def get_audio_note(
 async def get_audio_note_status(
     note_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Lightweight endpoint used by frontend to poll processing status and percent without heavy transcript payload."""
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Audio note '{note_id}' not found.",
+        )
+
+    if note.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Audio note '{note_id}' not found.",
@@ -234,12 +252,16 @@ async def stream_audio_note(
     note_id: str,
     db: AsyncSession = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
 ):
     """Stream audio content for browser HTML5 audio element."""
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     if settings.STORAGE_BACKEND.lower() == "s3":
@@ -281,12 +303,16 @@ async def retry_audio_note(
     note_id: str,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Reset a failed note and re-enqueue background worker."""
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     note.status = ProcessingStatus.UPLOADED
@@ -316,6 +342,7 @@ async def retry_audio_note(
 async def resummarize_note(
     note_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Re-summarize without re-transcribing (e.g. after swapping LLM keys).
 
@@ -325,6 +352,9 @@ async def resummarize_note(
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     if not note.raw_transcript or not note.raw_transcript.strip():
@@ -364,11 +394,15 @@ async def update_note_title(
     note_id: str,
     payload: AudioNoteUpdateTitle,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     note.title = payload.title.strip()
@@ -387,11 +421,15 @@ async def delete_audio_note(
     note_id: str,
     db: AsyncSession = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
     note = result.scalar_one_or_none()
 
     if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     # Remove file from storage

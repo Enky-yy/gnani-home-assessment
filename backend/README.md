@@ -16,6 +16,7 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 - **Upload Guardrails**: Extension allowlist + `MAX_UPLOAD_SIZE_MB` (default 500MB ≈ 8+ hours of MP3, enforced pre- and post-save with `413` + orphan cleanup) matches Nginx `client_max_body_size 500M` (300s proxy timeouts for slow links).
 - **Visible Failure Tolerance**: Granular exception handling for corrupt files, missing audio streams, Gnani 429 rate limits, and network timeouts with exponential backoff and retry endpoints (`POST /notes/{id}/retry`). Auth failures (401/403, e.g. expired keys) are never retried and surface visibly: a single clip fails the note to `FAILED`, while chunked audio fails only if *all* chunks error — partial chunk failures return the surviving text. The LLM summarizer fails over across every keyed provider (configured first), ignores `.env.example`-style placeholder keys entirely, and degrades to a labeled rule-based extractive summary only as a last resort. Saved transcripts can be re-summarized without re-transcribing (`POST /notes/{id}/summarize`). Every successful Gnani call logs its `request_id` for support correlation.
 - **PostgreSQL State Machine**: Tracks status through `UPLOADED` $\rightarrow$ `PREPROCESSING` $\rightarrow$ `TRANSCRIBING` $\rightarrow$ `SUMMARIZING` $\rightarrow$ `COMPLETED` / `FAILED`.
+- **Auth & Private Notes**: Email + password with bcrypt hashing; 7-day JWT bearer tokens (`Authorization: Bearer`). Every note carries `owner_id` and all note endpoints are scoped to the caller (cross-user access returns 404; legacy ownerless rows are hidden). Wrapper `init_db` migrates pre-auth databases idempotently.
 
 ---
 
@@ -23,6 +24,9 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Create an account (email + password, 8+ chars). |
+| `POST` | `/api/v1/auth/login` | Log in, receive a 7-day JWT bearer token. |
+| `GET` | `/api/v1/auth/me` | Current user profile (requires token). |
 | `POST` | `/api/v1/notes` | Upload audio file (`multipart/form-data`) & enqueue processing. |
 | `GET` | `/api/v1/notes` | List past uploads (supports search `?q=` across titles & transcripts). |
 | `GET` | `/api/v1/notes/{id}` | Get full note details, transcript segments, and LLM summary. |
@@ -83,9 +87,9 @@ python scripts/worker.py
 ## 5. Running Tests
 
 ```bash
-# Run full pytest suite — 24 tests: audio inspection, 16kHz normalization,
-# overlap-merge stitching, chunk all-fail vs partial-fail behavior,
-# LLM provider failover + placeholder-key guard, resummarize endpoint,
+# Run full pytest suite — 31 tests: auth (register/login/isolation), audio
+# inspection, 16kHz normalization, overlap-merge stitching, chunk all-fail
+# vs partial-fail, LLM failover + placeholder guard, resummarize endpoint,
 # API endpoints, e2e long audio, summarizer
 pytest app/tests/ -v
 ```

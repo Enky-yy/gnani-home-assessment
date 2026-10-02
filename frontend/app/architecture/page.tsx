@@ -17,6 +17,7 @@ export default function ArchitecturePage() {
           <li>
             Browser posts <code>multipart/form-data</code> to <code>POST /api/v1/notes</code> through nginx (500MB limit, ~8+ hours of audio). The backend
             validates extension and size, stores the stream, inserts a PostgreSQL row in <code>UPLOADED</code>, and returns 202 with the note id.
+            All note endpoints require login (email + password, JWT bearer token) and notes are private per account.
           </li>
           <li>
             The note id is pushed to the Redis list <code>audio_notes:jobs</code>. The <code>worker</code> service pops it and runs{" "}
@@ -104,7 +105,7 @@ export default function ArchitecturePage() {
         <ul className="list-disc pl-5">
           <li>Replace polling with server-sent events for progress.</li>
           <li>Add speaker diarization display and word-level timestamps.</li>
-          <li>Add auth, per-user note scoping, and full-text search ranking.</li>
+          <li>Add full-text search ranking across titles and transcripts.</li>
           <li>Move chunk transcription to parallel workers with a token bucket once Gnani quotas allow.</li>
           <li>Evaluate Gnani Batch STT for long files: one full-context pass with zero seams, at the cost of async job polling and no gu-IN/pa-IN support.</li>
         </ul>

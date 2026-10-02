@@ -25,6 +25,8 @@ os.environ["STORAGE_BACKEND"] = "local"
 os.environ["LOCAL_STORAGE_DIR"] = "/tmp/audio_test_uploads"
 os.environ["GNANI_API_KEY"] = ""  # Test in demo simulation mode
 os.environ["GEMINI_API_KEY"] = "" # Test in local extractive mode
+os.environ["GROQ_API_KEY"] = ""   # Isolate tests from real provider keys
+os.environ["OPENAI_API_KEY"] = "" # Isolate tests from real provider keys
 os.environ["DEBUG"] = "true"
 
 from app.database import Base, get_db, init_db, engine, AsyncSessionLocal
@@ -61,3 +63,22 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def auth_headers(async_client: AsyncClient) -> dict:
+    """Register a fresh user and return Authorization headers for it."""
+    import uuid
+
+    email = f"user_{uuid.uuid4().hex[:8]}@example.com"
+    reg = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "password123"},
+    )
+    assert reg.status_code == 201
+    login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "password123"},
+    )
+    assert login.status_code == 200
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}

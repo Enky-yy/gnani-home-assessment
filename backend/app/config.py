@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None
     JOB_QUEUE_NAME: str = "audio_notes:jobs"
 
+    # Auth (JWT, email + password)
+    # CHANGE THIS in production — every token is forgeable if this leaks.
+    JWT_SECRET: str = "dev-secret-change-me"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_HOURS: int = 168  # 7 days
+    MIN_PASSWORD_LENGTH: int = 8
+
     model_config = SettingsConfigDict(
         env_file=(
             os.path.join(os.path.dirname(__file__), "..", ".env"),

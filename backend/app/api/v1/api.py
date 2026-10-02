@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import notes, health, models
+from app.api.v1.endpoints import notes, health, models, auth
 
 api_router = APIRouter()
 
 api_router.include_router(health.router, prefix="/health", tags=["Health"])
+api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(notes.router, prefix="/notes", tags=["Audio Notes"])
 api_router.include_router(models.router, prefix="/models", tags=["Models"])

@@ -44,19 +44,20 @@ async def test_list_models(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_invalid_extension(async_client: AsyncClient):
+async def test_upload_invalid_extension(async_client: AsyncClient, auth_headers: dict):
     fake_file = io.BytesIO(b"Hello world text file")
     resp = await async_client.post(
         "/api/v1/notes",
         files={"file": ("document.txt", fake_file, "text/plain")},
         data={"title": "Invalid Note"},
+        headers=auth_headers,
     )
     assert resp.status_code == 400
     assert "Unsupported audio format" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_upload_and_retrieve_note(async_client: AsyncClient):
+async def test_upload_and_retrieve_note(async_client: AsyncClient, auth_headers: dict):
     wav_buf = create_in_memory_wav(duration_sec=2.0)
     
     # 1. Upload
@@ -64,6 +65,7 @@ async def test_upload_and_retrieve_note(async_client: AsyncClient):
         "/api/v1/notes",
         files={"file": ("test_voice_note.wav", wav_buf, "audio/wav")},
         data={"title": "Test Voice Recording", "language_code": "en-IN"},
+        headers=auth_headers,
     )
     assert upload_resp.status_code == 202
     note_data = upload_resp.json()
@@ -72,7 +74,7 @@ async def test_upload_and_retrieve_note(async_client: AsyncClient):
     assert note_data["status"] == "UPLOADED"
 
     # 2. Check status polling endpoint
-    status_resp = await async_client.get(f"/api/v1/notes/{note_id}/status")
+    status_resp = await async_client.get(f"/api/v1/notes/{note_id}/status", headers=auth_headers)
     assert status_resp.status_code == 200
     status_data = status_resp.json()
     assert status_data["id"] == note_id
@@ -80,7 +82,7 @@ async def test_upload_and_retrieve_note(async_client: AsyncClient):
     assert "current_step" in status_data
 
     # 3. Retrieve in list
-    list_resp = await async_client.get("/api/v1/notes")
+    list_resp = await async_client.get("/api/v1/notes", headers=auth_headers)
     assert list_resp.status_code == 200
     notes_list = list_resp.json()
     assert any(n["id"] == note_id for n in notes_list)
@@ -89,25 +91,29 @@ async def test_upload_and_retrieve_note(async_client: AsyncClient):
     patch_resp = await async_client.patch(
         f"/api/v1/notes/{note_id}/title",
         json={"title": "Renamed Voice Recording"},
+        headers=auth_headers,
     )
     assert patch_resp.status_code == 200
     assert patch_resp.json()["title"] == "Renamed Voice Recording"
 
     # 5. Delete note
-    del_resp = await async_client.delete(f"/api/v1/notes/{note_id}")
+    del_resp = await async_client.delete(f"/api/v1/notes/{note_id}", headers=auth_headers)
     assert del_resp.status_code == 204
 
     # 6. Verify 404 after deletion
-    get_after_del = await async_client.get(f"/api/v1/notes/{note_id}")
+    get_after_del = await async_client.get(f"/api/v1/notes/{note_id}", headers=auth_headers)
     assert get_after_del.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_resummarize_existing_transcript(async_client: AsyncClient, db_session):
+async def test_resummarize_existing_transcript(async_client: AsyncClient, db_session, auth_headers: dict):
     from app.models.audio_note import AudioNote, ProcessingStatus
 
+    me = await async_client.get("/api/v1/auth/me", headers=auth_headers)
+    owner_id = me.json()["id"]
     note = AudioNote(
         id="test-resum-01",
+        owner_id=owner_id,
         title="Resum Test",
         original_filename="r.wav",
         file_size_bytes=10,
@@ -123,7 +129,7 @@ async def test_resummarize_existing_transcript(async_client: AsyncClient, db_ses
     db_session.add(note)
     await db_session.commit()
 
-    resp = await async_client.post("/api/v1/notes/test-resum-01/summarize")
+    resp = await async_client.post("/api/v1/notes/test-resum-01/summarize", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["summary_tldr"]
@@ -132,11 +138,14 @@ async def test_resummarize_existing_transcript(async_client: AsyncClient, db_ses
 
 
 @pytest.mark.asyncio
-async def test_resummarize_without_transcript_rejected(async_client: AsyncClient, db_session):
+async def test_resummarize_without_transcript_rejected(async_client: AsyncClient, db_session, auth_headers: dict):
     from app.models.audio_note import AudioNote, ProcessingStatus
 
+    me = await async_client.get("/api/v1/auth/me", headers=auth_headers)
+    owner_id = me.json()["id"]
     note = AudioNote(
         id="test-resum-02",
+        owner_id=owner_id,
         title="Empty Note",
         original_filename="e.wav",
         file_size_bytes=10,
@@ -151,8 +160,8 @@ async def test_resummarize_without_transcript_rejected(async_client: AsyncClient
     db_session.add(note)
     await db_session.commit()
 
-    resp = await async_client.post("/api/v1/notes/test-resum-02/summarize")
+    resp = await async_client.post("/api/v1/notes/test-resum-02/summarize", headers=auth_headers)
     assert resp.status_code == 400
 
-    resp404 = await async_client.post("/api/v1/notes/does-not-exist/summarize")
+    resp404 = await async_client.post("/api/v1/notes/does-not-exist/summarize", headers=auth_headers)
     assert resp404.status_code == 404

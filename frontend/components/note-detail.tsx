@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TERMINAL_STATUSES,
-  audioStreamUrl,
   deleteNote,
+  fetchAudioBlobUrl,
   formatBytes,
   formatDuration,
   getNote,
+  isUnauthorized,
+  logout,
   getNoteStatus,
   renameNote,
   resummarizeNote,
@@ -24,6 +26,8 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(initial?.title ?? "");
 
@@ -74,6 +78,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
       const updated = await retryNote(id);
       setNote(updated);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        logout();
+        router.push("/login");
+        return;
+      }
       setActionError(err instanceof Error ? err.message : "Retry failed.");
     } finally {
       setBusy(false);
@@ -88,6 +97,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
       const updated = await resummarizeNote(id);
       setNote(updated);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        logout();
+        router.push("/login");
+        return;
+      }
       setActionError(err instanceof Error ? err.message : "Re-summarize failed.");
     } finally {
       setBusy(false);
@@ -124,6 +138,29 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    setAudioUrl(null);
+    setAudioError(null);
+    fetchAudioBlobUrl(id)
+      .then((blobUrl) => {
+        objectUrl = blobUrl;
+        setAudioUrl(blobUrl);
+      })
+      .catch((err) => {
+        if (isUnauthorized(err)) {
+          logout();
+          router.push("/login");
+          return;
+        }
+        setAudioError(err instanceof Error ? err.message : "Could not load audio.");
+      });
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   if (!note) {
     return <ErrorBanner message={loadError ?? "Note not found."} />;
@@ -187,7 +224,13 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
 
       <div className="rounded-lg border bg-white p-4 shadow-sm">
         <h2 className="font-semibold">Audio</h2>
-        <audio controls src={audioStreamUrl(id)} className="mt-2 w-full" preload="metadata" />
+        {audioError ? (
+          <p className="mt-2 text-sm text-red-700">{audioError}</p>
+        ) : audioUrl ? (
+          <audio controls src={audioUrl} className="mt-2 w-full" preload="metadata" />
+        ) : (
+          <p className="mt-2 text-sm text-zinc-600">Loading audio…</p>
+        )}
         {note.asr_engine_used && <p className="mt-1 text-xs text-zinc-500">ASR: {note.asr_engine_used}{note.llm_model_used ? ` · Summary: ${note.llm_model_used}` : ""}</p>}
       </div>
 

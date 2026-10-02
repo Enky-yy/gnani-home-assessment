@@ -90,10 +90,75 @@ async function handle<T>(res: Response): Promise<T> {
         /* ignore */
       }
     }
-    throw new Error(detail);
+    throw new ApiError(res.status, detail);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function isUnauthorized(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
+// --- Auth token (localStorage; browser only) ---
+
+const TOKEN_KEY = "audio_notes_token";
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function logout(): void {
+  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export interface UserRead {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+export async function registerUser(email: string, password: string): Promise<UserRead> {
+  const res = await fetch(url("/api/v1/auth/register"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return handle<UserRead>(res);
+}
+
+export async function loginUser(email: string, password: string): Promise<string> {
+  const res = await fetch(url("/api/v1/auth/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await handle<{ access_token: string }>(res);
+  setToken(data.access_token);
+  return data.access_token;
+}
+
+export async function fetchMe(): Promise<UserRead> {
+  const res = await fetch(url("/api/v1/auth/me"), { headers: { ...authHeaders() }, cache: "no-store" });
+  return handle<UserRead>(res);
 }
 
 export const TERMINAL_STATUSES: ProcessingStatus[] = ["COMPLETED", "FAILED"];
@@ -123,22 +188,22 @@ export async function uploadNote(file: File, title?: string, languageCode = "en-
   form.append("file", file);
   if (title) form.append("title", title);
   form.append("language_code", languageCode);
-  const res = await fetch(url("/api/v1/notes"), { method: "POST", body: form });
+  const res = await fetch(url("/api/v1/notes"), { method: "POST", headers: { ...authHeaders() }, body: form });
   return handle<AudioNoteDetail>(res);
 }
 
 export async function listNotes(): Promise<AudioNoteListItem[]> {
-  const res = await fetch(url("/api/v1/notes?limit=50"), { cache: "no-store" });
+  const res = await fetch(url("/api/v1/notes?limit=50"), { headers: { ...authHeaders() }, cache: "no-store" });
   return handle<AudioNoteListItem[]>(res);
 }
 
 export async function getNote(id: string): Promise<AudioNoteDetail> {
-  const res = await fetch(url(`/api/v1/notes/${id}`), { cache: "no-store" });
+  const res = await fetch(url(`/api/v1/notes/${id}`), { headers: { ...authHeaders() }, cache: "no-store" });
   return handle<AudioNoteDetail>(res);
 }
 
 export async function getNoteStatus(id: string): Promise<NoteStatus> {
-  const res = await fetch(url(`/api/v1/notes/${id}/status`), { cache: "no-store" });
+  const res = await fetch(url(`/api/v1/notes/${id}/status`), { headers: { ...authHeaders() }, cache: "no-store" });
   return handle<NoteStatus>(res);
 }
 
@@ -147,25 +212,35 @@ export function audioStreamUrl(id: string): string {
 }
 
 export async function retryNote(id: string): Promise<AudioNoteDetail> {
-  const res = await fetch(url(`/api/v1/notes/${id}/retry`), { method: "POST" });
+  const res = await fetch(url(`/api/v1/notes/${id}/retry`), { method: "POST", headers: { ...authHeaders() } });
   return handle<AudioNoteDetail>(res);
 }
 
 export async function resummarizeNote(id: string): Promise<AudioNoteDetail> {
-  const res = await fetch(url(`/api/v1/notes/${id}/summarize`), { method: "POST" });
+  const res = await fetch(url(`/api/v1/notes/${id}/summarize`), { method: "POST", headers: { ...authHeaders() } });
   return handle<AudioNoteDetail>(res);
 }
 
 export async function renameNote(id: string, title: string): Promise<AudioNoteDetail> {
   const res = await fetch(url(`/api/v1/notes/${id}/title`), {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ title }),
   });
   return handle<AudioNoteDetail>(res);
 }
 
 export async function deleteNote(id: string): Promise<void> {
-  const res = await fetch(url(`/api/v1/notes/${id}`), { method: "DELETE" });
+  const res = await fetch(url(`/api/v1/notes/${id}`), { method: "DELETE", headers: { ...authHeaders() } });
   return handle<void>(res);
+}
+
+export async function fetchAudioBlobUrl(id: string): Promise<string> {
+  const res = await fetch(url(`/api/v1/notes/${id}/audio`), { headers: { ...authHeaders() } });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, err.slice(0, 300));
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }

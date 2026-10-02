@@ -10,6 +10,7 @@ from sqlalchemy import (
     Text,
     DateTime,
     JSON,
+    ForeignKey,
     Enum as SQLEnum,
 )
 from app.database import Base
@@ -26,6 +27,9 @@ class ProcessingStatus(str, enum.Enum):
 
 class AudioNote(Base):
     __tablename__ = "audio_notes"
+
+    # Ownership (private per user; NULL rows are legacy and hidden from everyone)
+    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
 
     # Identity
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)

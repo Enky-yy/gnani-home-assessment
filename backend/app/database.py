@@ -51,6 +51,20 @@ async def init_db() -> None:
         import app.models  # ensure models are registered
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Lightweight migration for pre-auth databases: create_all won't
+            # add columns to existing tables, so add owner_id idempotently.
+            try:
+                if database_url.startswith("sqlite"):
+                    await conn.exec_driver_sql(
+                        "ALTER TABLE audio_notes ADD COLUMN owner_id VARCHAR(36)"
+                    )
+                else:
+                    await conn.exec_driver_sql(
+                        "ALTER TABLE audio_notes ADD COLUMN IF NOT EXISTS owner_id VARCHAR(36)"
+                    )
+            except Exception as mig_e:
+                # Column already exists (or table missing on fresh boot race).
+                logger.debug(f"owner_id migration skipped: {mig_e}")
         logger.info("Database tables verified/created successfully.")
     except Exception as e:
         logger.warning(

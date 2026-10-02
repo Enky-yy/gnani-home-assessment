@@ -74,30 +74,45 @@ in ~50s with a quality transcript.
   by `/api/v1/health` (which also reports DB, storage, queue depth).
 - No fake successes: every terminal state reflects what actually happened.
 
-## 6. Frontend (`frontend/`)
+## 6. Auth & private notes
 
-Next.js 14 App Router + Tailwind. `/` (upload + history), `/notes/[id]`
-(player, progress, transcript, summary, rename/retry/re-summarize/delete),
-`/architecture`. Browsers call same-origin `/api/*` via nginx; server
-pre-render uses `BACKEND_INTERNAL_URL` (Node `fetch` needs absolute URLs).
-Uploads get client-side extension + size checks mirroring the backend.
+Email + password (`POST /api/v1/auth/register`, min 8 chars, bcrypt-hashed;
+`POST /login` returns a 7-day JWT). Every note carries `owner_id`; all note
+endpoints require `Authorization: Bearer` and scope to the caller — cross-user
+access returns 404 (no existence leak), legacy ownerless rows are hidden from
+everyone. Audio streams via authenticated blob fetch (the `<audio>` element
+can't send headers). `init_db` adds the column idempotently for pre-auth
+databases. Secrets: `JWT_SECRET` in `backend/.env` (generated random).
 
-## 7. Configuration
+## 7. Frontend (`frontend/`)
+
+Next.js 14 App Router + Tailwind. `/login` (login/register), `/` (upload +
+history), `/notes/[id]` (player, progress, transcript, summary,
+rename/retry/re-summarize/delete), `/architecture`. Unauthenticated visits
+redirect to `/login`; 401s log out. Browsers call same-origin `/api/*` via
+nginx; server pre-render uses `BACKEND_INTERNAL_URL` (Node `fetch` needs
+absolute URLs). Uploads get client-side extension + size checks mirroring the
+backend.
+
+## 8. Configuration
 
 Secrets live in `backend/.env` (git-ignored; placeholders in `.env.example`):
 `DATABASE_URL`, `REDIS_URL`, `STORAGE_BACKEND` + S3 keys, `GNANI_API_KEY`,
-`LLM_PROVIDER` + `GEMINI/GROQ/OPENAI` keys + models, `MAX_UPLOAD_SIZE_MB`.
+`JWT_SECRET`, `LLM_PROVIDER` + `GEMINI/GROQ/OPENAI` keys + models,
+`MAX_UPLOAD_SIZE_MB`.
 Tunnel token lives in root `.env` as `CLOUDFLARE_TUNNEL_TOKEN`. See `DEPLOY.md`.
 
-## 8. Tests
+## 9. Tests
 
-24 pytest tests (`backend/app/tests/`): ffprobe validation, normalization
-output, overlap merging, chunk all-fail vs partial-fail, LLM failover +
-placeholder guard, upload/list/status/rename/delete/resummarize endpoints,
-65s chunked e2e, summarizer shape. Run: `pytest app/tests/ -v`.
+31 pytest tests (`backend/app/tests/`): auth (register/login/validation/
+isolation/legacy-hidden), ffprobe validation, normalization output, overlap
+merging, chunk all-fail vs partial-fail, LLM failover + placeholder guard,
+resummarize endpoint, upload/list/status/rename/delete, 65s chunked e2e,
+summarizer shape. Run: `pytest app/tests/ -v`.
 
-## 9. With more time
+## 10. With more time
 
 Gnani Batch STT for long files (full-context, zero seams; loses gu-IN/pa-IN),
-SSE instead of status polling, speaker diarization + word timestamps, auth with
-per-user scoping, parallel chunk workers with a token bucket once quotas allow.
+SSE instead of status polling, speaker diarization + word timestamps,
+full-text search ranking, parallel chunk workers with a token bucket once
+quotas allow. (Auth with per-user scoping shipped — see section 5.)

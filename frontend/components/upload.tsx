@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadNote } from "@/lib/api";
+import { uploadNote, isUnauthorized } from "@/lib/api";
 
 const ALLOWED = ["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm"];
 // Mirrors backend MAX_UPLOAD_SIZE_MB + nginx client_max_body_size.
 const MAX_MB = 500;
 
-export function UploadDropzone() {
+export function UploadDropzone({ onUploaded }: { onUploaded?: () => void }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -35,8 +35,13 @@ export function UploadDropzone() {
     setBusy(true);
     try {
       const note = await uploadNote(file, title.trim() || undefined, language);
+      onUploaded?.();
       router.push(`/notes/${note.id}`);
     } catch (err) {
+      if (isUnauthorized(err)) {
+        router.push("/login");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setBusy(false);

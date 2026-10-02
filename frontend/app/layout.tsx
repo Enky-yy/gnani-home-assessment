@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AuthNav } from "@/components/auth-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,13 +17,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="font-semibold tracking-tight">
               Audio Notes
             </Link>
-            <nav className="flex gap-4 text-sm text-zinc-600">
+            <nav className="flex items-center gap-4 text-sm text-zinc-600">
               <Link href="/" className="hover:text-zinc-900">
                 Uploads
               </Link>
               <Link href="/architecture" className="hover:text-zinc-900">
                 Architecture
               </Link>
+              <AuthNav />
             </nav>
           </div>
         </header>
