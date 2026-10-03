@@ -3,11 +3,21 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased;
+  @apply bg-void font-sans text-paper antialiased;
+}
+
+::selection {
+  background: #f5f2ea;
+  color: #000;
+}
+
+:focus-visible {
+  outline: 2px solid #f5f2ea;
+  outline-offset: 2px;
 }
 
 /* Indeterminate loading bar (single-shot jobs with no % to report, e.g. re-summarize) */
@@ -21,10 +31,17 @@ body {
 }
 
 .indeterminate-track {
-  @apply h-2 w-full overflow-hidden rounded-full bg-zinc-200;
+  @apply h-0.5 w-full overflow-hidden rounded-full bg-white/10;
 }
 
 .indeterminate-fill {
-  @apply h-full w-1/4 rounded-full bg-zinc-900;
+  @apply h-full w-1/4 rounded-full bg-rec;
   animation: indeterminate-slide 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate-fill {
+    animation: none;
+    width: 100%;
+  }
 }

@@ -38,43 +38,42 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto mt-10 max-w-sm rounded-lg border bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-semibold">{mode === "login" ? "Log in" : "Create account"}</h1>
-      <p className="mt-1 text-sm text-zinc-600">Your uploads are private to your account.</p>
-      <p className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-        Just looking? Use the demo account: <code className="font-mono">demo@example.com</code> /{" "}
-        <code className="font-mono">demo1234</code>
+    <div className="mx-auto mt-14 max-w-sm">
+      <h1 className="text-2xl font-semibold tracking-tight text-paper">{mode === "login" ? "Log in" : "Create account"}</h1>
+      <p className="mt-1 text-sm text-mute">Your uploads are private to your account.</p>
+      <p className="mt-3 border border-white/10 bg-panel px-3 py-2 font-mono text-xs leading-relaxed text-mute">
+        Just looking? <span className="text-paper">demo@example.com</span> / <span className="text-paper">demo1234</span>
       </p>
-      <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-        <label className="grid gap-1 text-sm">
+      <form onSubmit={onSubmit} className="mt-6 grid gap-4">
+        <label className="grid gap-1.5 text-sm text-mute">
           Email
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-md border px-3 py-2"
+            className="rounded border border-white/15 bg-void px-3 py-2 text-paper"
             autoComplete="email"
           />
         </label>
-        <label className="grid gap-1 text-sm">
+        <label className="grid gap-1.5 text-sm text-mute">
           Password
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border px-3 py-2"
+            className="rounded border border-white/15 bg-void px-3 py-2 text-paper"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </label>
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          <div className="rounded border border-rec/40 bg-rec/10 px-3 py-2 text-sm text-paper" role="alert">
             {error}
           </div>
         )}
         <button
           type="submit"
           disabled={busy}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded bg-paper px-4 py-2 text-sm font-medium text-void disabled:opacity-40"
         >
           {busy ? "Please wait…" : mode === "login" ? "Log in" : "Register"}
         </button>
@@ -84,7 +83,7 @@ export default function LoginPage() {
           setMode(mode === "login" ? "register" : "login");
           setError(null);
         }}
-        className="mt-3 text-sm text-zinc-600 underline"
+        className="mt-4 text-sm text-mute underline hover:text-paper"
       >
         {mode === "login" ? "Need an account? Register" : "Have an account? Log in"}
       </button>

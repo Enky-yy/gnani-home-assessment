@@ -42,20 +42,20 @@ export function AuthNav() {
     router.push("/login");
   }
 
-  if (!checked) return <span className="text-sm text-zinc-400">…</span>;
+  if (!checked) return <span className="font-mono text-xs text-mute">…</span>;
   if (!user) {
     return (
-      <a href="/login" className="text-sm text-zinc-600 hover:text-zinc-900">
+      <a href="/login" className="hover:text-paper">
         Log in
       </a>
     );
   }
   return (
-    <span className="flex items-center gap-3 text-sm">
-      <span className="max-w-40 truncate text-zinc-600" title={user.email}>
+    <span className="flex items-center gap-3">
+      <span className="max-w-40 truncate font-mono text-xs" title={user.email}>
         {user.email}
       </span>
-      <button onClick={onLogout} className="text-zinc-600 hover:text-zinc-900">
+      <button onClick={onLogout} className="hover:text-paper">
         Log out
       </button>
     </span>

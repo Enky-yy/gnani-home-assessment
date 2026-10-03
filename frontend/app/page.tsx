@@ -45,11 +45,11 @@ export default function HomePage() {
     <div className="grid gap-6">
       <UploadDropzone onUploaded={refresh} />
       <section>
-        <h2 className="text-lg font-semibold">Past uploads</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-paper">Past uploads</h2>
         {loading ? (
-          <p className="mt-2 text-sm text-zinc-600">Loading…</p>
+          <p className="mt-4 font-mono text-sm text-mute">Loading…</p>
         ) : loadError ? (
-          <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          <div className="mt-4 rounded border border-rec/40 bg-rec/10 px-3 py-2 text-sm text-paper" role="alert">
             Could not reach the backend: {loadError}
           </div>
         ) : (

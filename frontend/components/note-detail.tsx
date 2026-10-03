@@ -174,133 +174,135 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
   const processing = !TERMINAL_STATUSES.includes(note.status);
 
   return (
-    <div className="grid gap-4">
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="grid gap-10">
+      <section>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
           {editing ? (
             <div className="flex gap-2">
-              <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} className="rounded-md border px-3 py-1.5 text-sm" maxLength={255} />
-              <button onClick={onRename} disabled={busy} className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+              <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} className="rounded border border-white/15 bg-void px-3 py-1.5 text-sm text-paper" maxLength={255} />
+              <button onClick={onRename} disabled={busy} className="rounded bg-paper px-3 py-1.5 text-sm font-medium text-void disabled:opacity-40">
                 Save
               </button>
-              <button onClick={() => setEditing(false)} className="rounded-md border px-3 py-1.5 text-sm">
+              <button onClick={() => setEditing(false)} className="rounded border border-white/20 px-3 py-1.5 text-sm text-paper">
                 Cancel
               </button>
             </div>
           ) : (
-            <h1 className="text-xl font-semibold">{note.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-paper">{note.title}</h1>
           )}
           <StatusBadge status={note.status} />
         </div>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 font-mono text-xs text-mute">
           {note.original_filename} · {formatBytes(note.file_size_bytes)} · {formatDuration(note.duration_seconds)} · {note.language_code}
         </p>
         {processing && (
-          <div className="mt-3">
-            <ProgressBar value={note.progress_percentage} />
-            <p className="mt-1 text-sm text-zinc-600">
+          <div className="mt-4 max-w-md">
+            <ProgressBar value={note.progress_percentage} active />
+            <p className="mt-1.5 font-mono text-xs text-mute">
               {note.progress_percentage}% — {note.current_step}
             </p>
           </div>
         )}
-        <ErrorBanner message={note.status === "FAILED" ? note.error_message : null} />
-        <ErrorBanner message={actionError} />
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+        <div className="mt-3 grid gap-2">
+          <ErrorBanner message={note.status === "FAILED" ? note.error_message : null} />
+          <ErrorBanner message={actionError} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2 text-sm">
           {!editing && (
-            <button onClick={() => setEditing(true)} className="rounded-md border px-3 py-1.5">
+            <button onClick={() => setEditing(true)} className="rounded border border-white/20 px-3 py-1.5 text-paper hover:border-paper">
               Rename
             </button>
           )}
           {note.status === "FAILED" && (
-            <button onClick={onRetry} disabled={busy} className="rounded-md bg-zinc-900 px-3 py-1.5 text-white disabled:opacity-50">
+            <button onClick={onRetry} disabled={busy} className="rounded bg-paper px-3 py-1.5 font-medium text-void disabled:opacity-40">
               {busy ? "Retrying…" : "Retry processing"}
             </button>
           )}
           {note.raw_transcript && (
-            <button onClick={onResummarize} disabled={busy} className="rounded-md border px-3 py-1.5" title="Re-run only the LLM summary on the existing transcript (no re-transcription)">
+            <button onClick={onResummarize} disabled={busy} className="rounded border border-white/20 px-3 py-1.5 text-paper hover:border-paper disabled:opacity-40" title="Re-run only the LLM summary on the existing transcript (no re-transcription)">
               {busy ? "Summarizing…" : "Re-summarize"}
             </button>
           )}
-          <button onClick={onDelete} disabled={busy} className="rounded-md border border-red-200 px-3 py-1.5 text-red-700">
+          <button onClick={onDelete} disabled={busy} className="rounded border border-rec/50 px-3 py-1.5 text-rec disabled:opacity-40">
             Delete
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">Audio</h2>
+      <section className="border-t border-white/10 pt-6">
+        <h2 className="text-lg font-semibold tracking-tight text-paper">Audio</h2>
         {audioError ? (
-          <p className="mt-2 text-sm text-red-700">{audioError}</p>
+          <p className="mt-2 text-sm text-rec">{audioError}</p>
         ) : audioUrl ? (
-          <audio controls src={audioUrl} className="mt-2 w-full" preload="metadata" />
+          <audio controls src={audioUrl} className="mt-3 w-full accent-[#E6E1F5]" preload="metadata" />
         ) : (
-          <p className="mt-2 text-sm text-zinc-600">Loading audio…</p>
+          <p className="mt-2 text-sm text-mute">Loading audio…</p>
         )}
-        {note.asr_engine_used && <p className="mt-1 text-xs text-zinc-500">ASR: {note.asr_engine_used}{note.llm_model_used ? ` · Summary: ${note.llm_model_used}` : ""}</p>}
-      </div>
+        {note.asr_engine_used && <p className="mt-2 font-mono text-xs text-mute">ASR: {note.asr_engine_used}{note.llm_model_used ? ` · Summary: ${note.llm_model_used}` : ""}</p>}
+      </section>
 
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">Transcript</h2>
+      <section className="border-t border-white/10 pt-6">
+        <h2 className="text-lg font-semibold tracking-tight text-paper">Transcript</h2>
         {!note.raw_transcript ? (
-          <p className="mt-2 text-sm text-zinc-600">{processing ? "Transcript is being generated…" : "No transcript yet."}</p>
+          <p className="mt-2 text-sm text-mute">{processing ? "Transcript is being generated…" : "No transcript yet."}</p>
         ) : (
           <>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{note.raw_transcript}</p>
+            <p className="mt-4 max-w-2xl whitespace-pre-wrap font-mono text-sm leading-loose text-paper/90">{note.raw_transcript}</p>
             {note.transcript_segments.length > 1 && (
-              <ul className="mt-3 grid gap-2 border-t pt-3">
+              <ul className="mt-5 grid gap-3 border-t border-white/10 pt-5">
                 {note.transcript_segments.map((s, i) => (
-                  <li key={i} className="text-sm">
-                    <span className="font-mono text-xs text-zinc-500">
+                  <li key={i} className="max-w-2xl font-mono text-sm leading-relaxed">
+                    <span className="text-xs text-mute">
                       [{s.start.toFixed(1)}s → {s.end.toFixed(1)}s]
                     </span>{" "}
-                    {s.text}
+                    <span className="text-paper/80">{s.text}</span>
                   </li>
                 ))}
               </ul>
             )}
           </>
         )}
-      </div>
+      </section>
 
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="font-semibold">Summary</h2>
+      <section className="border-t border-white/10 pt-6">
+        <h2 className="text-lg font-semibold tracking-tight text-paper">Summary</h2>
         {summarizing && (
-          <div className="mt-2" role="status" aria-label="Summarizing in progress">
+          <div className="mt-3 max-w-md" role="status" aria-label="Summarizing in progress">
             <div className="indeterminate-track">
               <div className="indeterminate-fill" />
             </div>
-            <p className="mt-1 text-sm text-zinc-600">Summarizing with AI…</p>
+            <p className="mt-1.5 text-sm text-mute">Summarizing with AI…</p>
           </div>
         )}
         {!note.summary_tldr ? (
-          <p className="mt-2 text-sm text-zinc-600">{processing ? "Summary will appear after transcription…" : "No summary yet."}</p>
+          <p className="mt-2 text-sm text-mute">{processing ? "Summary will appear after transcription…" : "No summary yet."}</p>
         ) : (
-          <div className="mt-2 grid gap-3 text-sm">
-            <p className="leading-relaxed">{note.summary_tldr}</p>
+          <div className="mt-3 grid max-w-2xl gap-4 text-sm leading-relaxed text-paper/90">
+            <p className="text-base">{note.summary_tldr}</p>
             {note.summary_key_points.length > 0 && (
               <div>
-                <h3 className="font-medium">Key points</h3>
-                <ul className="mt-1 list-disc pl-5">
+                <h3 className="font-medium text-paper">Key points</h3>
+                <ul className="mt-1.5 grid gap-1.5">
                   {note.summary_key_points.map((k, i) => (
-                    <li key={i}>{k}</li>
+                    <li key={i} className="flex gap-2"><span className="text-mute">—</span>{k}</li>
                   ))}
                 </ul>
               </div>
             )}
             {note.summary_action_items.length > 0 && (
               <div>
-                <h3 className="font-medium">Action items</h3>
-                <ul className="mt-1 list-disc pl-5">
+                <h3 className="font-medium text-paper">Action items</h3>
+                <ul className="mt-1.5 grid gap-1.5">
                   {note.summary_action_items.map((a, i) => (
-                    <li key={i}>{a}</li>
+                    <li key={i} className="flex gap-2"><span className="text-mute">—</span>{a}</li>
                   ))}
                 </ul>
               </div>
             )}
-            {note.summary_sentiment && <p className="text-xs text-zinc-500">Sentiment: {note.summary_sentiment}</p>}
+            {note.summary_sentiment && <p className="font-mono text-xs text-mute">Sentiment: {note.summary_sentiment}</p>}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

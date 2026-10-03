@@ -33,7 +33,7 @@ export default function NotePage({ params }: { params: { id: string } }) {
       });
   }, [params.id, router]);
 
-  if (!ready) return <p className="text-sm text-zinc-600">Loading…</p>;
+  if (!ready) return <p className="font-mono text-sm text-mute">Loading…</p>;
   if (!initial) return <ErrorBanner message={notFound ? "Note not found." : "Could not load note."} />;
   return <NoteDetail id={params.id} initial={initial} />;
 }

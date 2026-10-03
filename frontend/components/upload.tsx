@@ -49,33 +49,33 @@ export function UploadDropzone({ onUploaded }: { onUploaded?: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="rounded-lg border bg-white p-4 shadow-sm">
-      <h2 className="text-lg font-semibold">Upload audio</h2>
-      <p className="mt-1 text-sm text-zinc-600">
-        Any length — 2 minute recordings and longer are chunked in the background. You get a 202 immediately and can watch progress.
+    <form onSubmit={onSubmit}>
+      <h2 className="text-2xl font-semibold tracking-tight text-paper">Upload audio</h2>
+      <p className="mt-1 max-w-xl text-sm leading-relaxed text-mute">
+        Any length — long recordings are chunked in the background while you watch.
       </p>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-5 grid gap-4 border-y border-white/10 py-6">
         <input
           type="file"
           accept={ALLOWED.map((e) => `.${e}`).join(",")}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm"
+          className="text-sm text-mute file:mr-3 file:rounded file:border file:border-white/20 file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:text-paper hover:file:border-paper"
           aria-label="Audio file"
         />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-1.5 text-sm text-mute">
             Title (optional)
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Team sync Oct 2"
-              className="rounded-md border px-3 py-2"
+              className="rounded border border-white/15 bg-void px-3 py-2 text-paper placeholder:text-mute/60"
               maxLength={255}
             />
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1.5 text-sm text-mute">
             Language
-            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="rounded-md border px-3 py-2">
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="rounded border border-white/15 bg-void px-3 py-2 text-paper">
               <option value="en-IN">en-IN</option>
               <option value="hi-IN">hi-IN</option>
               <option value="en">en</option>
@@ -83,17 +83,19 @@ export function UploadDropzone({ onUploaded }: { onUploaded?: () => void }) {
           </label>
         </div>
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          <div className="rounded border border-rec/40 bg-rec/10 px-3 py-2 text-sm text-paper" role="alert">
             {error}
           </div>
         )}
-        <button
-          type="submit"
-          disabled={busy || !file}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {busy ? "Uploading…" : "Upload and transcribe"}
-        </button>
+        <div>
+          <button
+            type="submit"
+            disabled={busy || !file}
+            className="rounded bg-paper px-5 py-2 text-sm font-medium text-void disabled:opacity-40"
+          >
+            {busy ? "Uploading…" : "Upload and transcribe"}
+          </button>
+        </div>
       </div>
     </form>
   );
