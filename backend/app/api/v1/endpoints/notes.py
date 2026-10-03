@@ -14,7 +14,7 @@ from fastapi import (
     Query,
     status,
 )
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, desc
 
@@ -265,8 +265,30 @@ async def stream_audio_note(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
 
     if settings.STORAGE_BACKEND.lower() == "s3":
-        presigned_url = storage.generate_access_url(note.storage_path)
-        return RedirectResponse(url=presigned_url)
+        # Stream bytes through the backend instead of redirecting to a
+        # presigned URL: header-signed boto3 calls succeed in environments
+        # where presigned query-string signatures get mangled/rejected, and
+        # the player keeps one uniform authenticated blob flow. Temp file
+        # gives the audio element Range/seek support; deleted after serving.
+        import tempfile
+        from starlette.background import Background
+
+        fd, tmp_path = tempfile.mkstemp(prefix=f"stream_{note_id[:8]}_", suffix=os.path.splitext(note.original_filename)[1] or ".mp3")
+        os.close(fd)
+        try:
+            storage.download_file(note.storage_path, tmp_path)
+        except Exception as e:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Audio file unavailable: {e}")
+        return FileResponse(
+            tmp_path,
+            media_type=note.mime_type or "audio/mpeg",
+            filename=note.original_filename,
+            background=Background(lambda p=tmp_path: os.path.exists(p) and os.remove(p)),
+        )
 
     # For local storage, stream local file with range header support
     local_path = None
@@ -292,40 +314,6 @@ async def stream_audio_note(
         media_type=note.mime_type or "audio/mpeg",
         filename=note.original_filename,
     )
-
-
-@router.get(
-    "/{note_id}/audio-url",
-    summary="Get a fresh playback URL (presigned S3 URL or local stream path)",
-)
-async def get_audio_playback_url(
-    note_id: str,
-    db: AsyncSession = Depends(get_db),
-    storage: StorageService = Depends(get_storage),
-    current_user: User = Depends(get_current_user),
-):
-    """Authenticated URL handoff for the audio player.
-
-    The <audio> element cannot send Authorization headers, and fetching a
-    presigned S3 redirect *with* the JWT breaks (S3 rejects the extra auth
-    header + CORS preflight). So the player asks here (with token) and then
-    loads the returned URL directly, header-free.
-    """
-    result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
-    note = result.scalar_one_or_none()
-
-    if not note:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
-
-    if note.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
-
-    if settings.STORAGE_BACKEND.lower() == "s3":
-        if not storage.file_exists(note.storage_path):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file missing in bucket.")
-        return {"url": storage.generate_access_url(note.storage_path)}
-
-    return {"url": f"{settings.API_V1_STR}/notes/{note_id}/audio"}
 
 
 @router.post(

@@ -168,21 +168,21 @@ async def test_resummarize_without_transcript_rejected(async_client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_audio_url_handoff(async_client: AsyncClient, db_session, auth_headers: dict):
+async def test_audio_stream_auth_gates(async_client: AsyncClient, db_session, auth_headers: dict):
     from app.models.audio_note import AudioNote, ProcessingStatus
 
     me = await async_client.get("/api/v1/auth/me", headers=auth_headers)
     owner_id = me.json()["id"]
     db_session.add(
         AudioNote(
-            id="test-aurl-01",
+            id="test-astream-01",
             owner_id=owner_id,
-            title="URL Test",
+            title="Stream Auth Test",
             original_filename="u.wav",
             file_size_bytes=10,
             mime_type="audio/wav",
             storage_backend="local",
-            storage_path="audio/test-aurl-01/u.wav",
+            storage_path="audio/test-astream-01/u.wav",
             status=ProcessingStatus.COMPLETED,
             progress_percentage=100,
             current_step="done",
@@ -191,9 +191,19 @@ async def test_audio_url_handoff(async_client: AsyncClient, db_session, auth_hea
     )
     await db_session.commit()
 
-    # no token -> 401 (player must authenticate)
-    assert (await async_client.get("/api/v1/notes/test-aurl-01/audio-url")).status_code == 401
-    # owner -> local stream path handoff
-    ok = await async_client.get("/api/v1/notes/test-aurl-01/audio-url", headers=auth_headers)
-    assert ok.status_code == 200
-    assert ok.json()["url"].endswith("/api/v1/notes/test-aurl-01/audio")
+    # no token -> 401 before any file access
+    assert (await async_client.get("/api/v1/notes/test-astream-01/audio")).status_code == 401
+
+    # second user -> 404 (no existence leak), also before file access
+    reg = await async_client.post(
+        "/api/v1/auth/register", json={"email": "stream_b@example.com", "password": "password123"}
+    )
+    assert reg.status_code == 201
+    login = await async_client.post(
+        "/api/v1/auth/login", json={"email": "stream_b@example.com", "password": "password123"}
+    )
+    other = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert (await async_client.get("/api/v1/notes/test-astream-01/audio", headers=other)).status_code == 404
+
+    # owner, missing file on disk -> 404 missing (not 500)
+    assert (await async_client.get("/api/v1/notes/test-astream-01/audio", headers=auth_headers)).status_code == 404

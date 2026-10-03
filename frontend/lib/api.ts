@@ -244,12 +244,3 @@ export async function fetchAudioBlobUrl(id: string): Promise<string> {
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }
-
-export async function fetchPlaybackUrl(id: string): Promise<string> {
-  const res = await fetch(url(`/api/v1/notes/${id}/audio-url`), {
-    headers: { ...authHeaders() },
-    cache: "no-store",
-  });
-  const data = await handle<{ url: string }>(res);
-  return data.url;
-}

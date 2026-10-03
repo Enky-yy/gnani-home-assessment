@@ -6,7 +6,6 @@ import {
   TERMINAL_STATUSES,
   deleteNote,
   fetchAudioBlobUrl,
-  fetchPlaybackUrl,
   formatBytes,
   formatDuration,
   getNote,
@@ -147,16 +146,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
     setAudioUrl(null);
     setAudioError(null);
 
+    // One uniform flow for every backend: authenticated fetch of /audio
+    // (the backend streams S3 bytes itself, so no presigned URL ever
+    // reaches the browser), then blob playback.
     async function load() {
-      // S3 notes: ask the backend for a fresh presigned URL and load it
-      // directly (header-free media load — no JWT leak, no CORS preflight).
-      // Local notes: authenticated blob fetch (same-origin, no redirect).
       try {
-        if (note?.storage_backend === "s3") {
-          const direct = await fetchPlaybackUrl(id);
-          if (!cancelled) setAudioUrl(direct);
-          return;
-        }
         const blobUrl = await fetchAudioBlobUrl(id);
         objectUrl = blobUrl;
         if (!cancelled) setAudioUrl(blobUrl);
