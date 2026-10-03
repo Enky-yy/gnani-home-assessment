@@ -49,9 +49,10 @@ flowchart TB
 1. **Upload** — Browser posts `multipart/form-data` to `POST /api/v1/notes`
    (`backend/app/api/v1/endpoints/notes.py`). Extension allowlist + 500MB cap
    enforced pre-save (declared size) and post-save (actual size, orphan
-   cleanup, `413`). Stored under `audio/<note_id>/<filename>` (S3 via boto3 +
-   presigned playback URLs, or local partitioned layout with traversal
-   protection). DB row created in `UPLOADED`, API returns **202** immediately.
+   cleanup, `413`). Stored under `audio/<note_id>/<filename>` (S3 via boto3
+   or local partitioned layout with traversal protection). Playback is always
+   backend-streamed bytes, never presigned URLs. DB row created in `UPLOADED`,
+   API returns **202** immediately.
 2. **Enqueue** — Note id pushed to Redis (`app/services/queue.py`); without
    `REDIS_URL` the API falls back to in-process `BackgroundTasks`.
 3. **Worker** (`app/services/job_runner.py`) — downloads to scratch dir,
@@ -71,8 +72,10 @@ flowchart TB
 5. **Persist** — transcript, segments, summary → Postgres, note → `COMPLETED`
    (or `FAILED` with the exact error + Retry). Scratch dir cleaned up.
 6. **Read** — Frontend polls lightweight `GET /status` every 2s (percent +
-   `current_step`), then loads the full note. Audio streams from
-   `GET /{id}/audio` (S3 redirect or local file).
+   `current_step`), then loads the full note. Audio plays from `GET
+   /{id}/audio` as an authenticated blob fetch — the backend streams the
+   bytes itself (S3 objects via temp file with Range/seek, deleted after
+   serving), so no presigned URL ever reaches the browser.
 
 ```mermaid
 sequenceDiagram
@@ -101,9 +104,11 @@ sequenceDiagram
     U->>A: GET /notes/{id} + audio blob
 ```
 
-**Storage honesty:** the interface supports S3 (boto3 + presigned URLs) and
-local disk per note, but the live deployment currently runs **local disk**
-while the new AWS account activates — cutover is config-only, no migration.
+**Storage honesty:** the interface supports S3 (boto3) and local disk per
+note, and the live deployment stores new uploads in S3. Playback is always
+backend-streamed bytes (never presigned redirects): header-signed S3 calls
+succeed in environments where presigned query-string signatures get rejected,
+and temp-file serving preserves Range/seek support.
 
 ## 3. Long audio
 
@@ -165,11 +170,11 @@ Tunnel token lives in root `.env` as `CLOUDFLARE_TUNNEL_TOKEN`. See `DEPLOY.md`.
 
 ## 9. Tests
 
-31 pytest tests (`backend/app/tests/`): auth (register/login/validation/
-isolation/legacy-hidden), ffprobe validation, normalization output, overlap
-merging, chunk all-fail vs partial-fail, LLM failover + placeholder guard,
-resummarize endpoint, upload/list/status/rename/delete, 65s chunked e2e,
-summarizer shape. Run: `pytest app/tests/ -v`.
+32 pytest tests (`backend/app/tests/`): auth (register/login/validation/
+isolation/legacy-hidden), stream auth gates, ffprobe validation,
+normalization output, overlap merging, chunk all-fail vs partial-fail, LLM
+failover + placeholder guard, resummarize endpoint, upload/list/status/
+rename/delete, 65s chunked e2e, summarizer shape. Run: `pytest app/tests/ -v`.
 
 ## 10. Operations
 

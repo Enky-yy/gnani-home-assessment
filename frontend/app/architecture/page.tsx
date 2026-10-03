@@ -53,7 +53,8 @@ export default function ArchitecturePage() {
           </li>
           <li>
             The frontend polls lightweight <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">GET /api/v1/notes/{"{id}"}/status</code> every 2s for progress, then loads the full note. Audio plays
-            from <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">GET /api/v1/notes/{"{id}"}/audio</code> (S3 presigned redirect or local file stream).
+            from <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">GET /api/v1/notes/{"{id}"}/audio</code> as an authenticated blob fetch — the backend streams the bytes itself
+            (S3 objects included), so no presigned URL ever reaches the browser and seeking works on long files.
           </li>
         </ol>
       </section>
@@ -62,11 +63,12 @@ export default function ArchitecturePage() {
         <h2 className="text-lg font-semibold tracking-tight text-paper">Where files live</h2>
         <p>
           Audio is addressed by partitioned keys <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">audio/{"<note_id>"}/{"<filename>"}</code> behind
-          one storage interface with two backends: AWS S3 via boto3 with presigned playback URLs, or local disk under{" "}
+          one storage interface with two backends: AWS S3 via boto3, or local disk under{" "}
           <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">/app/uploads</code> (shared <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">backend_uploads</code> volume between API and worker).
-          Each note remembers its own backend, so mixed deployments keep working. The live deployment currently runs local disk while the AWS
-          account activates — switching to S3 is a config-only change with no migration. Local files get traversal protection, legacy flat-file
-          fallback from an earlier layout, and cleanup of empty note folders on delete.
+          Each note remembers its own backend, so mixed deployments keep working. Playback never uses presigned URLs: the backend streams the bytes
+          itself (temp file with Range/seek support, deleted after serving) because header-signed S3 calls succeed in environments where presigned
+          query-string signatures get rejected. Local files get traversal protection, legacy flat-file fallback from an earlier layout, and cleanup
+          of empty note folders on delete.
         </p>
       </section>
 

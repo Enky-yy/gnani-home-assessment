@@ -33,6 +33,12 @@ the Cloudflare edge (automatic certificate).
   site (a sleeping laptop = site down).
 - Backend/LLM/Gnani secrets live in `backend/.env` (git-ignored). On any new
   host, copy it over — the compose file only holds non-secret config.
+- Audio storage: `STORAGE_BACKEND=s3` + `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` / `AWS_S3_BUCKET_NAME` in
+  `backend/.env` (IAM needs Get/Put/Delete/List on the bucket; multipart
+  uploads additionally need `ListMultipartUploadParts`). `local` (default)
+  stores under the `backend_uploads` volume instead; each note remembers its
+  backend, so switching never strands old files.
 - Health: `https://gnani.harsh-shah.me/api/v1/health`.
 - Logs: `sudo docker logs audio_notes_tunnel | tail` (tunnel),
   `sudo docker logs audio_notes_backend | tail` (API),

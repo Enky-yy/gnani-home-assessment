@@ -12,7 +12,7 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
   - Audio `> 25s`: Dynamically sliced into 24-second chunks with 1-second overlap using FFmpeg. Chunks are transcribed serially (semaphore=1 + pacing sleep) to respect API rate limits, then stitched with precise segment timestamps.
 - **ASR-Input Normalization**: Every clip is transcoded to clean 16kHz mono 16-bit PCM WAV before reaching Gnani, with a speech-band filter chain (80Hz highpass, 7.5kHz lowpass) plus EBU R128 loudness normalization — so quiet phone recordings and loud compressed rips (e.g. 48kHz stereo webm from YouTube) hit the engine at a consistent level. Chunked audio is already emitted normalized by the chunker and skips the second pass.
 - **Seam-Dedup Stitching**: Consecutive chunks share ~1s of audio, so the full transcript is stitched with word-level suffix/prefix overlap merging (case/punctuation-insensitive, minimum 3 words to avoid false merges on bigrams like "of the") instead of naive joining. Per-chunk segments keep their original text and timestamps.
-- **AWS S3 Storage Integration**: Audio streams are stored directly in AWS S3 buckets using `boto3`, generating presigned URLs for client streaming. Seamless fallback to local storage for zero-cloud offline development. Local layout preserves partitioning (`<base>/audio/<note_id>/<filename>`) with traversal protection, legacy flat-file fallback, and empty-dir cleanup on delete. Local playback URLs are note-scoped (`/api/v1/notes/{id}/audio`).
+- **AWS S3 Storage Integration**: Audio streams are stored directly in AWS S3 buckets using `boto3`, with seamless fallback to local storage for zero-cloud offline development. Playback is always backend-streamed (temp file with Range/seek, deleted after serving) — no presigned URLs reach the browser. Local layout preserves partitioning (`<base>/audio/<note_id>/<filename>`) with traversal protection, legacy flat-file fallback, empty-dir cleanup on delete, and note-scoped playback URLs (`/api/v1/notes/{id}/audio`).
 - **Upload Guardrails**: Extension allowlist + `MAX_UPLOAD_SIZE_MB` (default 500MB ≈ 8+ hours of MP3, enforced pre- and post-save with `413` + orphan cleanup) matches Nginx `client_max_body_size 500M` (300s proxy timeouts for slow links).
 - **Visible Failure Tolerance**: Granular exception handling for corrupt files, missing audio streams, Gnani 429 rate limits, and network timeouts with exponential backoff and retry endpoints (`POST /notes/{id}/retry`). Auth failures (401/403, e.g. expired keys) are never retried and surface visibly: a single clip fails the note to `FAILED`, while chunked audio fails only if *all* chunks error — partial chunk failures return the surviving text. The LLM summarizer fails over across every keyed provider (configured first), ignores `.env.example`-style placeholder keys entirely, and degrades to a labeled rule-based extractive summary only as a last resort. Saved transcripts can be re-summarized without re-transcribing (`POST /notes/{id}/summarize`). Every successful Gnani call logs its `request_id` for support correlation.
 - **PostgreSQL State Machine**: Tracks status through `UPLOADED` $\rightarrow$ `PREPROCESSING` $\rightarrow$ `TRANSCRIBING` $\rightarrow$ `SUMMARIZING` $\rightarrow$ `COMPLETED` / `FAILED`.
@@ -31,7 +31,7 @@ Production-grade asynchronous audio processing backend built with **FastAPI**, *
 | `GET` | `/api/v1/notes` | List past uploads (supports search `?q=` across titles & transcripts). |
 | `GET` | `/api/v1/notes/{id}` | Get full note details, transcript segments, and LLM summary. |
 | `GET` | `/api/v1/notes/{id}/status`| Fast polling endpoint for real-time progress percentage & current step. |
-| `GET` | `/api/v1/notes/{id}/audio` | Stream audio file directly or redirect to presigned S3 URL. |
+| `GET` | `/api/v1/notes/{id}/audio` | Stream audio bytes (local file or S3 object via temp file; Range/seek supported). |
 | `POST` | `/api/v1/notes/{id}/retry` | Re-trigger processing on a failed or stuck note. |
 | `POST` | `/api/v1/notes/{id}/summarize` | Re-run LLM summarization on the stored transcript (no re-transcription). |
 | `PATCH`| `/api/v1/notes/{id}/title` | Rename an audio note title. |
@@ -88,10 +88,10 @@ python scripts/worker.py
 ## 5. Running Tests
 
 ```bash
-# Run full pytest suite — 31 tests: auth (register/login/isolation), audio
-# inspection, 16kHz normalization, overlap-merge stitching, chunk all-fail
-# vs partial-fail, LLM failover + placeholder guard, resummarize endpoint,
-# API endpoints, e2e long audio, summarizer
+# Run full pytest suite — 32 tests: auth (register/login/isolation), stream
+# auth gates, audio inspection, 16kHz normalization, overlap-merge stitching,
+# chunk all-fail vs partial-fail, LLM failover + placeholder guard,
+# resummarize endpoint, API endpoints, e2e long audio, summarizer
 pytest app/tests/ -v
 ```
 

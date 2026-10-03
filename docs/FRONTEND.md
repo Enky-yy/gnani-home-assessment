@@ -25,7 +25,9 @@
 - No token or any 401 → redirect `/login` (and token cleared). Header nav
   re-checks `/me` on every navigation so login/logout reflect instantly.
 - `<audio>` can't send headers, so playback loads via authenticated
-  `fetch` → blob object URL (`fetchAudioBlobUrl`), revoked on unmount.
+  `fetch` → blob object URL (`fetchAudioBlobUrl`), revoked on unmount. The
+  backend streams the bytes itself for both backends (S3 objects included),
+  so no presigned URL ever reaches the browser.
 - Re-summarize is a single synchronous LLM call: indeterminate sliding bar
   (`globals.css`) while it runs; the determinate % bar is reserved for the
   multi-step transcription pipeline (`GET /status` polled every 2s).
