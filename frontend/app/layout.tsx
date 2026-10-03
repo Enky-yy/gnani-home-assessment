@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${grotesk.variable} ${mono.variable}`}>
       <body>
-        <header className="border-b border-white/10 bg-void">
+        <header className="border-b border-white/20 bg-void">
           <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
             <Link href="/" className="text-lg font-semibold tracking-tight text-paper">
               Audio Notes

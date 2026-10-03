@@ -54,7 +54,7 @@ export function UploadDropzone({ onUploaded }: { onUploaded?: () => void }) {
       <p className="mt-1 max-w-xl text-sm leading-relaxed text-mute">
         Any length — long recordings are chunked in the background while you watch.
       </p>
-      <div className="mt-5 grid gap-4 border-y border-white/10 py-6">
+      <div className="mt-5 grid gap-4 border-y border-white/20 py-6">
         <input
           type="file"
           accept={ALLOWED.map((e) => `.${e}`).join(",")}

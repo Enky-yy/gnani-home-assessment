@@ -31,7 +31,7 @@ body {
 }
 
 .indeterminate-track {
-  @apply h-0.5 w-full overflow-hidden rounded-full bg-white/10;
+  @apply h-0.5 w-full overflow-hidden rounded-full bg-white/20;
 }
 
 .indeterminate-fill {

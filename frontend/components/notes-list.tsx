@@ -7,7 +7,7 @@ export function NotesList({ notes }: { notes: AudioNoteListItem[] }) {
     return <p className="mt-6 text-sm text-mute">No uploads yet. Upload your first recording above.</p>;
   }
   return (
-    <ul className="mt-2 divide-y divide-white/10 border-y border-white/10">
+    <ul className="mt-2 divide-y divide-white/20 border-y border-white/20">
       {notes.map((n) => (
         <li key={n.id} className="py-5">
           <div className="flex items-baseline justify-between gap-3">

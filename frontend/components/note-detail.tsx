@@ -229,7 +229,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
         </div>
       </section>
 
-      <section className="border-t border-white/10 pt-6">
+      <section className="border-t border-white/20 pt-6">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Audio</h2>
         {audioError ? (
           <p className="mt-2 text-sm text-rec">{audioError}</p>
@@ -241,7 +241,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
         {note.asr_engine_used && <p className="mt-2 font-mono text-xs text-mute">ASR: {note.asr_engine_used}{note.llm_model_used ? ` · Summary: ${note.llm_model_used}` : ""}</p>}
       </section>
 
-      <section className="border-t border-white/10 pt-6">
+      <section className="border-t border-white/20 pt-6">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Transcript</h2>
         {!note.raw_transcript ? (
           <p className="mt-2 text-sm text-mute">{processing ? "Transcript is being generated…" : "No transcript yet."}</p>
@@ -249,7 +249,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
           <>
             <p className="mt-4 max-w-2xl whitespace-pre-wrap font-mono text-sm leading-loose text-paper/90">{note.raw_transcript}</p>
             {note.transcript_segments.length > 1 && (
-              <ul className="mt-5 grid gap-3 border-t border-white/10 pt-5">
+              <ul className="mt-5 grid gap-3 border-t border-white/20 pt-5">
                 {note.transcript_segments.map((s, i) => (
                   <li key={i} className="max-w-2xl font-mono text-sm leading-relaxed">
                     <span className="text-xs text-mute">
@@ -264,7 +264,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
         )}
       </section>
 
-      <section className="border-t border-white/10 pt-6">
+      <section className="border-t border-white/20 pt-6">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Summary</h2>
         {summarizing && (
           <div className="mt-3 max-w-md" role="status" aria-label="Summarizing in progress">

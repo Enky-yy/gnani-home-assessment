@@ -41,7 +41,7 @@ export default function LoginPage() {
     <div className="mx-auto mt-14 max-w-sm">
       <h1 className="text-2xl font-semibold tracking-tight text-paper">{mode === "login" ? "Log in" : "Create account"}</h1>
       <p className="mt-1 text-sm text-mute">Your uploads are private to your account.</p>
-      <p className="mt-3 border border-white/10 bg-panel px-3 py-2 font-mono text-xs leading-relaxed text-mute">
+      <p className="mt-3 border border-white/20 bg-panel px-3 py-2 font-mono text-xs leading-relaxed text-mute">
         Just looking? <span className="text-paper">demo@example.com</span> / <span className="text-paper">demo1234</span>
       </p>
       <form onSubmit={onSubmit} className="mt-6 grid gap-4">

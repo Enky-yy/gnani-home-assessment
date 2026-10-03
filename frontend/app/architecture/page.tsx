@@ -5,13 +5,13 @@ export default function ArchitecturePage() {
         <h1 className="text-3xl font-semibold tracking-tight text-paper">Architecture</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mute">
           How the Audio Notes Platform turns an upload into a transcript and summary. GitHub:{" "}
-          <a className="text-paper underline decoration-white/30 underline-offset-4 hover:decoration-paper" href="https://github.com/Enky-yy/gnani-home-assessment">
+          <a className="text-paper underline decoration-white/50 underline-offset-4 hover:decoration-paper" href="https://github.com/Enky-yy/gnani-home-assessment">
             Enky-yy/gnani-home-assessment
           </a>
         </p>
       </div>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Flow from upload to transcript</h2>
         <ol className="grid list-decimal gap-2 pl-5">
           <li>
@@ -45,7 +45,7 @@ export default function ArchitecturePage() {
         </ol>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Where files live</h2>
         <p>
           Production uses AWS S3 via boto3 under keys <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">audio/{"<note_id>"}/{"<filename>"}</code> with presigned playback URLs. Local development uses
@@ -54,7 +54,7 @@ export default function ArchitecturePage() {
         </p>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">How long audio is handled</h2>
         <p>
           Gnani REST rejects audio over 30s, so the backend caps REST at 25s (<code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">GNANI_MAX_REST_AUDIO_SECONDS</code>) and slices anything longer into
@@ -64,7 +64,7 @@ export default function ArchitecturePage() {
         </p>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Failure handling and fallbacks</h2>
         <ul className="grid list-disc gap-2 pl-5">
           <li>Corrupt or empty files fail fast to <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">FAILED</code> with the ffprobe reason shown and a Retry button.</li>
@@ -75,7 +75,7 @@ export default function ArchitecturePage() {
         </ul>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">How the frontend reaches the backend</h2>
         <p>
           In the browser, all API calls use same-origin relative <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">/api/*</code> URLs through nginx, which proxies them to the backend. Page
@@ -84,7 +84,7 @@ export default function ArchitecturePage() {
         </p>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Synchronous vs background</h2>
         <ul className="grid list-disc gap-2 pl-5">
           <li>Synchronous: extension/size validation, storage write, DB insert, 202 response, status polling reads, audio streaming.</li>
@@ -92,7 +92,7 @@ export default function ArchitecturePage() {
         </ul>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Deployment</h2>
         <p>
           The app is live at <a className="underline" href="https://gnani.harsh-shah.me">https://gnani.harsh-shah.me</a> from a single{" "}
@@ -102,7 +102,7 @@ export default function ArchitecturePage() {
         </p>
       </section>
 
-      <section className="grid max-w-2xl gap-3 border-t border-white/10 pt-6 text-sm leading-relaxed text-paper/85">
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">With more time</h2>
         <ul className="grid list-disc gap-2 pl-5">
           <li>Replace polling with server-sent events for progress.</li>

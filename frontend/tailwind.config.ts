@@ -7,7 +7,7 @@ const config = {
         void: "#000000",
         panel: "#131315",
         paper: "#F5F2EA",
-        mute: "#8E8E93",
+        mute: "#A1A1AA",
         rec: "#FF3B30",
       },
       fontFamily: {

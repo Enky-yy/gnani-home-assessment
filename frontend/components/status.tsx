@@ -20,7 +20,7 @@ export function StatusBadge({ status }: { status: ProcessingStatus }) {
 export function ProgressBar({ value, active }: { value: number; active?: boolean }) {
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+    <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/20" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       <div className={`h-full rounded-full transition-all ${active ? "bg-rec" : "bg-paper"}`} style={{ width: `${pct}%` }} />
     </div>
   );
