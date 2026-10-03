@@ -17,6 +17,33 @@ Technical companion to the in-app `/architecture` page. Live at
 
 Postgres and uploads persist in `postgres_data` / `backend_uploads` volumes.
 
+```mermaid
+flowchart TB
+    Browser["Browser<br/>Next.js UI · JWT in localStorage"]
+    Tunnel["Cloudflare Tunnel<br/>outbound-only · TLS at edge"]
+    Nginx["nginx (internal)<br/>/api/* → backend · / → frontend"]
+    FE["frontend :3000<br/>upload · list · detail · /login"]
+    API["backend :8000<br/>auth · notes · health · audio"]
+    Worker["worker<br/>drains audio_notes:jobs"]
+    PG[(Postgres<br/>users · notes · status)]
+    Redis[(Redis<br/>durable job queue)]
+    Store[(S3 / local<br/>audio/&lt;id&gt;/&lt;file&gt;)]
+    Gnani["Gnani Prisma v2.5<br/>STT REST /stt/v3"]
+    LLM["Groq / Gemini<br/>LangChain summary · failover"]
+
+    Browser --> Tunnel --> Nginx
+    Nginx --> FE
+    Nginx --> API
+    API --> PG
+    API --> Store
+    API --> Redis
+    Redis --> Worker
+    Worker --> PG
+    Worker --> Store
+    Worker --> Gnani
+    Worker --> LLM
+```
+
 ## 2. Upload → transcript → summary
 
 1. **Upload** — Browser posts `multipart/form-data` to `POST /api/v1/notes`
@@ -46,6 +73,37 @@ Postgres and uploads persist in `postgres_data` / `backend_uploads` volumes.
 6. **Read** — Frontend polls lightweight `GET /status` every 2s (percent +
    `current_step`), then loads the full note. Audio streams from
    `GET /{id}/audio` (S3 redirect or local file).
+
+```mermaid
+sequenceDiagram
+    participant U as Browser
+    participant A as backend (/api)
+    participant R as Redis
+    participant W as worker
+    participant G as Gnani STT
+    participant L as LLM
+    participant D as Postgres
+    U->>A: POST /notes (multipart) + Bearer
+    A->>A: validate ext/size, store audio
+    A->>D: insert row (UPLOADED)
+    A->>R: RPUSH note id
+    A-->>U: 202 + note id
+    R->>W: BLPOP wakes worker
+    W->>W: ffprobe + normalize (PREPROCESSING)
+    loop each 24s chunk (or once if ≤25s)
+        W->>G: REST /stt/v3 + retry/backoff (TRANSCRIBING)
+    end
+    W->>L: LangChain chain, failover order (SUMMARIZING)
+    W->>D: transcript + summary (COMPLETED/FAILED)
+    loop every 2s until terminal
+        U->>A: GET /status → percent + step
+    end
+    U->>A: GET /notes/{id} + audio blob
+```
+
+**Storage honesty:** the interface supports S3 (boto3 + presigned URLs) and
+local disk per note, but the live deployment currently runs **local disk**
+while the new AWS account activates — cutover is config-only, no migration.
 
 ## 3. Long audio
 
@@ -113,9 +171,25 @@ merging, chunk all-fail vs partial-fail, LLM failover + placeholder guard,
 resummarize endpoint, upload/list/status/rename/delete, 65s chunked e2e,
 summarizer shape. Run: `pytest app/tests/ -v`.
 
-## 10. With more time
+## 10. Operations
+
+- **Health:** `GET /api/v1/health` reports database, storage backend,
+  queue backend + depth, Gnani mode (`active` vs `demo-simulation-mode`) and
+  LLM mode (`active (provider)` vs `extractive-fallback-mode`) — the first
+  place to look when output degrades.
+- **Tracing:** every Gnani success logs its `request_id`; worker and API
+  logs carry note ids on every state transition (`UPDATE ... → TRANSCRIBING
+  (40%): ...`), so any note's history is greppable.
+- **Failure drills already survived:** duplicate tunnel connectors (flaky
+  502s), nginx caching dead upstream IPs after rebuilds (runtime DNS fix),
+  retired Groq models (model-ID refresh via the provider's own models API).
+- **Keep-alive:** the host must stay on with `docker compose up`; tunnel +
+  `restart: unless-stopped` recover from reboots, Postgres/uploads live in
+  named volumes.
+
+## 11. With more time
 
 Gnani Batch STT for long files (full-context, zero seams; loses gu-IN/pa-IN),
 SSE instead of status polling, speaker diarization + word timestamps,
 full-text search ranking, parallel chunk workers with a token bucket once
-quotas allow. (Auth with per-user scoping shipped — see section 5.)
+quotas allow. (Auth with per-user scoping shipped — see section 6.)

@@ -1,3 +1,5 @@
+import { PipelineDiagram, SystemDiagram } from "@/components/architecture-diagram";
+
 export default function ArchitecturePage() {
   return (
     <article className="grid gap-10">
@@ -10,6 +12,17 @@ export default function ArchitecturePage() {
           </a>
         </p>
       </div>
+
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
+        <h2 className="text-lg font-semibold tracking-tight text-paper">System map</h2>
+        <p>
+          Every request travels the same spine: browser → tunnel → internal nginx, which splits
+          UI traffic to the Next.js frontend and data traffic to the FastAPI backend. The backend
+          writes state to Postgres, audio to object storage, and jobs to Redis; a separate worker
+          drains the queue and calls the external AI APIs. Nothing except the tunnel has a public port.
+        </p>
+        <SystemDiagram />
+      </section>
 
       <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Flow from upload to transcript</h2>
@@ -48,9 +61,12 @@ export default function ArchitecturePage() {
       <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
         <h2 className="text-lg font-semibold tracking-tight text-paper">Where files live</h2>
         <p>
-          Production uses AWS S3 via boto3 under keys <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">audio/{"<note_id>"}/{"<filename>"}</code> with presigned playback URLs. Local development uses
-          the same key layout under <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">/app/uploads</code> (shared <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">backend_uploads</code> volume between API and worker), with traversal
-          protection and cleanup of empty note folders on delete.
+          Audio is addressed by partitioned keys <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">audio/{"<note_id>"}/{"<filename>"}</code> behind
+          one storage interface with two backends: AWS S3 via boto3 with presigned playback URLs, or local disk under{" "}
+          <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">/app/uploads</code> (shared <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">backend_uploads</code> volume between API and worker).
+          Each note remembers its own backend, so mixed deployments keep working. The live deployment currently runs local disk while the AWS
+          account activates — switching to S3 is a config-only change with no migration. Local files get traversal protection, legacy flat-file
+          fallback from an earlier layout, and cleanup of empty note folders on delete.
         </p>
       </section>
 
@@ -62,6 +78,7 @@ export default function ArchitecturePage() {
           retries; the shared ~1s overlap is collapsed with word-level suffix/prefix merging so seams don&apos;t duplicate phrases. Segments are sorted
           by start time for the timestamped view. A 2 minute recording becomes ~6 chunks and never blocks the upload request.
         </p>
+        <PipelineDiagram />
       </section>
 
       <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
@@ -89,6 +106,15 @@ export default function ArchitecturePage() {
         <ul className="grid list-disc gap-2 pl-5">
           <li>Synchronous: extension/size validation, storage write, DB insert, 202 response, status polling reads, audio streaming.</li>
           <li>Background: storage download, ffprobe, Gnani chunking/transcription, LLM summarization, final DB write, scratch cleanup.</li>
+        </ul>
+      </section>
+
+      <section className="grid max-w-2xl gap-3 border-t border-white/20 pt-6 text-sm leading-relaxed text-paper/85">
+        <h2 className="text-lg font-semibold tracking-tight text-paper">Data, privacy & operations</h2>
+        <ul className="grid list-disc gap-2 pl-5">
+          <li>Two tables: <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">users</code> (id, email, bcrypt hash) and <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">audio_notes</code> (file metadata, <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">owner_id</code>, status + progress, transcript segments JSON, summary fields, engine labels). Cross-user access returns 404 rather than 403 so note existence never leaks.</li>
+          <li>Login issues a 7-day JWT; passwords never leave bcrypt hashes, and audio streams through authenticated blob fetch because media tags cannot send headers.</li>
+          <li>Operability: <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">/api/v1/health</code> reports database, storage, queue depth, and integration states; every Gnani call logs its <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[13px] text-paper">request_id</code> for support correlation; 31 hermetic pytest tests (provider keys blanked, nothing billable) guard the pipeline.</li>
         </ul>
       </section>
 
