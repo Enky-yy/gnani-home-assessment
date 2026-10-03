@@ -271,7 +271,7 @@ async def stream_audio_note(
         # the player keeps one uniform authenticated blob flow. Temp file
         # gives the audio element Range/seek support; deleted after serving.
         import tempfile
-        from starlette.background import Background
+        from starlette.background import BackgroundTask
 
         fd, tmp_path = tempfile.mkstemp(prefix=f"stream_{note_id[:8]}_", suffix=os.path.splitext(note.original_filename)[1] or ".mp3")
         os.close(fd)
@@ -287,7 +287,7 @@ async def stream_audio_note(
             tmp_path,
             media_type=note.mime_type or "audio/mpeg",
             filename=note.original_filename,
-            background=Background(lambda p=tmp_path: os.path.exists(p) and os.remove(p)),
+            background=BackgroundTask(lambda p=tmp_path: os.path.exists(p) and os.remove(p)),
         )
 
     # For local storage, stream local file with range header support
