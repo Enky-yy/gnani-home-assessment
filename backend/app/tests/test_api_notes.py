@@ -165,3 +165,35 @@ async def test_resummarize_without_transcript_rejected(async_client: AsyncClient
 
     resp404 = await async_client.post("/api/v1/notes/does-not-exist/summarize", headers=auth_headers)
     assert resp404.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_audio_url_handoff(async_client: AsyncClient, db_session, auth_headers: dict):
+    from app.models.audio_note import AudioNote, ProcessingStatus
+
+    me = await async_client.get("/api/v1/auth/me", headers=auth_headers)
+    owner_id = me.json()["id"]
+    db_session.add(
+        AudioNote(
+            id="test-aurl-01",
+            owner_id=owner_id,
+            title="URL Test",
+            original_filename="u.wav",
+            file_size_bytes=10,
+            mime_type="audio/wav",
+            storage_backend="local",
+            storage_path="audio/test-aurl-01/u.wav",
+            status=ProcessingStatus.COMPLETED,
+            progress_percentage=100,
+            current_step="done",
+            language_code="en-IN",
+        )
+    )
+    await db_session.commit()
+
+    # no token -> 401 (player must authenticate)
+    assert (await async_client.get("/api/v1/notes/test-aurl-01/audio-url")).status_code == 401
+    # owner -> local stream path handoff
+    ok = await async_client.get("/api/v1/notes/test-aurl-01/audio-url", headers=auth_headers)
+    assert ok.status_code == 200
+    assert ok.json()["url"].endswith("/api/v1/notes/test-aurl-01/audio")

@@ -6,6 +6,7 @@ import {
   TERMINAL_STATUSES,
   deleteNote,
   fetchAudioBlobUrl,
+  fetchPlaybackUrl,
   formatBytes,
   formatDuration,
   getNote,
@@ -28,6 +29,7 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
   const [summarizing, setSummarizing] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioFellBack, setAudioFellBack] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(initial?.title ?? "");
 
@@ -141,14 +143,25 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
 
   useEffect(() => {
     let objectUrl: string | null = null;
+    let cancelled = false;
     setAudioUrl(null);
     setAudioError(null);
-    fetchAudioBlobUrl(id)
-      .then((blobUrl) => {
+
+    async function load() {
+      // S3 notes: ask the backend for a fresh presigned URL and load it
+      // directly (header-free media load — no JWT leak, no CORS preflight).
+      // Local notes: authenticated blob fetch (same-origin, no redirect).
+      try {
+        if (note?.storage_backend === "s3") {
+          const direct = await fetchPlaybackUrl(id);
+          if (!cancelled) setAudioUrl(direct);
+          return;
+        }
+        const blobUrl = await fetchAudioBlobUrl(id);
         objectUrl = blobUrl;
-        setAudioUrl(blobUrl);
-      })
-      .catch((err) => {
+        if (!cancelled) setAudioUrl(blobUrl);
+      } catch (err) {
+        if (cancelled) return;
         if (isUnauthorized(err)) {
           logout();
           router.push("/login");
@@ -160,8 +173,11 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
           return;
         }
         setAudioError(err instanceof Error ? err.message : "Could not load audio.");
-      });
+      }
+    }
+    load();
     return () => {
+      cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,7 +250,22 @@ export function NoteDetail({ id, initial }: { id: string; initial: AudioNoteDeta
         {audioError ? (
           <p className="mt-2 text-sm text-rec">{audioError}</p>
         ) : audioUrl ? (
-          <audio controls src={audioUrl} className="mt-3 w-full accent-[#E6E1F5]" preload="metadata" />
+          <audio
+            controls
+            src={audioUrl}
+            className="mt-3 w-full accent-[#F5F2EA]"
+            preload="metadata"
+            onError={() => {
+              // Direct URL dead (e.g. missing object)? Fall back once to the
+              // note's stored audio URL before showing an error.
+              if (!audioFellBack && note.audio_url?.startsWith("http") && audioUrl !== note.audio_url) {
+                setAudioFellBack(true);
+                setAudioUrl(note.audio_url);
+              } else {
+                setAudioError("Could not load audio.");
+              }
+            }}
+          />
         ) : (
           <p className="mt-2 text-sm text-mute">Loading audio…</p>
         )}

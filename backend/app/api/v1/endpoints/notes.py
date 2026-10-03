@@ -294,6 +294,40 @@ async def stream_audio_note(
     )
 
 
+@router.get(
+    "/{note_id}/audio-url",
+    summary="Get a fresh playback URL (presigned S3 URL or local stream path)",
+)
+async def get_audio_playback_url(
+    note_id: str,
+    db: AsyncSession = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
+    current_user: User = Depends(get_current_user),
+):
+    """Authenticated URL handoff for the audio player.
+
+    The <audio> element cannot send Authorization headers, and fetching a
+    presigned S3 redirect *with* the JWT breaks (S3 rejects the extra auth
+    header + CORS preflight). So the player asks here (with token) and then
+    loads the returned URL directly, header-free.
+    """
+    result = await db.execute(select(AudioNote).where(AudioNote.id == note_id))
+    note = result.scalar_one_or_none()
+
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if note.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio note not found.")
+
+    if settings.STORAGE_BACKEND.lower() == "s3":
+        if not storage.file_exists(note.storage_path):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file missing in bucket.")
+        return {"url": storage.generate_access_url(note.storage_path)}
+
+    return {"url": f"{settings.API_V1_STR}/notes/{note_id}/audio"}
+
+
 @router.post(
     "/{note_id}/retry",
     response_model=AudioNoteResponse,
